@@ -1,57 +1,296 @@
-# React + TypeScript + Vite
+# 电商数据分析仪表板
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于 React + TypeScript + Vite 构建的电商运营数据分析平台，支持销售订单分析、商品利润计算、营销推广效果评估、退款专项分析和智能运营建议。
 
-Currently, two official plugins are available:
+## 功能概览
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 数据总览
+- 经营健康度评分（基于销售额、利润率、退款率、ROI 综合评估）
+- 7 大核心指标卡片（销售额、订单数、销量、客单价、营销花费、净利润、利润率）
+- 环比对比标签（今日 vs 昨日 / 7天 vs 上7天 / 15天 vs 上15天 / 30天 vs 上30天）
+- 日销售趋势图（含 SKU 维度趋势）
+- TOP 10 热销 SKU 榜
+- 低利润 SKU 预警
+- 涨价模拟器（模拟涨价对利润的影响）
+- SKU 分类看板（爆品 / 风险品 / 衰退品）
 
-## Expanding the ESLint configuration
+### 商品分析
+- 按规格维度的销售/成本/利润明细表
+- 真实退款率自动计算（基于订单数据，按金额占比）
+- 支持多列排序、搜索筛选
+- 合计行汇总
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 利润计算
+- 逐规格输入成本明细（成本单价、快递费、包装耗材、运费险、商家承担优惠）
+- 退款率自动回用（真实退款率）或手动覆盖（假设分析）
+- 退货损失 = 退款收入损失 + 退回运费损失
+- 保本投产比计算（含退款损失）
+- 定价建议（基于目标利润率反推售价）
+- 实时预览单件净利润
+- 配置持久化（localStorage）
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+### 营销数据分析
+- 推广总览（花费、交易额、ROI、点击率、询单/收藏/关注指标）
+- 按商品维度的推广效果汇总
+- 推广预算优化建议（基于净 ROI 给出加预算/维持/减预算/暂停建议）
+- 利润影响模拟
+
+### 退款专项分析
+- 退款总览（退款率、退款损失额、高退款率 SKU 数）
+- 高退款率 SKU 预警（退款率 > 20% 且订单数 ≥ 3）
+- 退款明细表（支持搜索和排序）
+- 退款率颜色分级（≥40% 红 / ≥20% 橙 / ≥10% 黄）
+
+### 智能运营建议中心
+- 7 类智能建议：亏损 SKU、低利润高销量、高退款率、低 ROI 推广、销售额下滑、客单价下降、整体退款率偏高
+- 按严重程度排序（critical / warning / info / success）
+- 分类标签筛选
+
+## 技术栈
+
+| 类别 | 技术 |
+|------|------|
+| 框架 | React 18 + TypeScript 5.8 |
+| 构建 | Vite 6 |
+| 样式 | TailwindCSS 3 |
+| 图表 | Recharts 3 |
+| 路由 | React Router 7 |
+| 状态 | Zustand 5 |
+| 数据解析 | xlsx（Excel/CSV） |
+
+## 快速开始
+
+### 环境要求
+
+- Node.js ≥ 18
+- npm ≥ 9
+
+### 本地开发
+
+```bash
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+
+# 构建生产版本
+npm run build
+
+# 预览生产构建
+npm run preview
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+开发服务器默认运行在 `http://localhost:5173`。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 使用说明
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+### 第一步：上传数据
+
+页面顶部有数据上传区域，支持两种数据源：
+
+| 数据类型 | 格式 | 来源 | 是否必填 |
+|----------|------|------|----------|
+| 销售订单 | CSV | 拼多多商家后台 → 订单管理 → 导出订单 | 必填 |
+| 营销推广 | Excel/CSV | 拼多多推广后台 → 报表导出 | 选填（上传后才有营销分析） |
+
+**操作方式**：
+1. 点击对应的上传区域，选择文件
+2. 上传成功后页面自动加载数据
+3. 数据存储在浏览器内存中，刷新页面需重新上传
+
+### 第二步：设置时间范围
+
+页面顶部的时间筛选器控制全局数据范围：
+
+| 选项 | 说明 |
+|------|------|
+| 今日 | 当天数据，环比对比昨日 |
+| 7天 | 最近7天，环比对比上7天 |
+| 15天 | 最近15天，环比对比上15天 |
+| 30天 | 最近30天，环比对比上30天 |
+| 全部 | 所有数据，不显示环比 |
+
+### 第三步：浏览各功能 Tab
+
+底部 Tab 栏切换功能模块：
+
+#### 📊 总览
+- 查看核心指标和环比变化
+- 经营健康度评分（绿/黄/红三档）
+- 日销售趋势图（可切换日/周维度）
+- TOP 10 热销 SKU 和低利润预警
+- 涨价模拟器：拖动滑块模拟涨价 X%，查看利润变化
+
+#### 📦 商品分析
+- 按规格维度的销售明细表
+- 点击表头排序（销售额/销量/利润率/真实退款率等）
+- 搜索框输入商品ID或名称筛选
+- "真实退款率"列自动从订单数据计算，颜色分级显示
+
+#### 💰 利润计算
+1. 点击表格中"未配置"的规格，弹出配置弹窗
+2. 填写成本信息：
+   - **成本单价**（必填，元/件）
+   - **定价**（用于计算保本投产和定价建议）
+   - **快递费**（开关启用，元/件）
+   - **包装耗材**（开关启用，元/件）
+   - **运费险**（开关启用，元/件）
+   - **商家承担优惠**（元/件）
+   - **退款率**（开关启用后手动输入；不启用则自动用真实退款率）
+3. 弹窗实时显示：
+   - 单件总成本、预估退款损失（含退回运费）、净利润、利润率
+   - 保本投产比
+   - 定价建议（可调整目标利润率，反推建议售价）
+4. 保存后配置自动持久化（localStorage），刷新不丢失
+
+**退款率说明**：
+- 未启用手动退款率 → 自动使用真实退款率（基于订单数据）
+- 启用手动退款率 → 使用用户输入值（用于假设分析，如"如果退款率降到5%利润多少"）
+- 表格"退款率"列显示当前使用的值和来源（手动/真实）
+
+#### 📈 营销数据
+- 上传营销数据后显示
+- 推广总览卡片（花费、交易额、ROI、点击率、询单/收藏/关注成本）
+- 按商品维度的推广效果表
+- 底部"推广预算优化建议"：基于净 ROI 自动给出加预算/维持/减预算/暂停建议
+
+#### ↩️ 退款分析
+- 退款总览（退款率、退款损失额、高退款率SKU数）
+- 高退款率 SKU 预警区（退款率 > 20% 且订单数 ≥ 3）
+- 退款明细表（支持搜索和按退款率/损失额/订单数排序）
+
+#### 💡 智能建议
+- 自动汇总 7 类运营建议：
+  - 🔴 亏损 SKU（净利润 < 0）
+  - 🟠 低利润高销量（销量高于均值但利润率 < 5%）
+  - 🔴 高退款率 SKU（退款率 > 20%）
+  - 🔴 低 ROI 推广（净 ROI < 1）
+  - 🟠 销售额环比下滑（降幅 > 10%）
+  - 🔵 客单价环比下降（降幅 > 10%）
+  - 🟢 利润健康提示（利润率 ≥ 15%）
+- 按严重程度排序，支持分类标签筛选
+
+### 常见问题
+
+**Q: 上传 CSV 后没有数据？**
+A: 检查 CSV 是否为拼多多标准导出格式，字段名需包含"商品规格"、"商家实收金额"、"售后状态"等。
+
+**Q: 利润计算中退款率显示"真实X%"？**
+A: 表示未启用手动退款率，系统自动使用订单数据计算的真实退款率。如需手动调整，请在配置弹窗中勾选"启用退款率"。
+
+**Q: 保本投产比显示"无法保本"？**
+A: 表示单件净利润 ≤ 0（定价不足以覆盖成本+退款损失），需要提高定价或降低成本。
+
+**Q: 配置丢失了？**
+A: 成本配置存储在浏览器 localStorage 中，清除浏览器数据或更换浏览器/设备会导致丢失。同一浏览器同一域名下持久保存。
+
+**Q: 营销数据 Tab 没有内容？**
+A: 需要先上传营销推广数据（Excel/CSV），且数据时间范围与销售订单有重叠。
+
+## Docker 部署
+
+### 本地构建镜像
+
+```bash
+docker build -t trae-project .
+docker run -d -p 80:80 trae-project
 ```
+
+访问 `http://localhost` 即可。
+
+### 从 Docker Hub 拉取
+
+```bash
+docker pull <用户名>/trae-project:1.1
+docker run -d -p 80:80 <用户名>/trae-project:1.1
+```
+
+## CI/CD
+
+项目配置了 GitHub Actions（`.github/workflows/docker-publish.yml`）：
+
+- **触发条件**：push 到 `main` 或 `master` 分支
+- **自动构建**：多阶段 Docker 构建（node:20 构建 + nginx:1.27 服务）
+- **自动推送**：同时打上 `1.1` 和 `latest` 标签推送到 Docker Hub
+- **缓存加速**：启用 GitHub Actions 层缓存
+
+### 所需 GitHub Secrets
+
+| Secret 名 | 说明 |
+|-----------|------|
+| `DOCKER_HUB_USERNAME` | Docker Hub 用户名 |
+| `DOCKER_HUB_TOKEN` | Docker Hub Access Token |
+
+## 项目结构
+
+```
+src/
+├── components/           # 业务组件
+│   ├── OrderOverview.tsx       # 数据总览
+│   ├── ProductAnalysis.tsx     # 商品分析
+│   ├── CostInputPanel.tsx      # 利润计算
+│   ├── MarketingAnalysis.tsx   # 营销数据分析
+│   ├── RefundAnalysis.tsx      # 退款专项分析
+│   ├── AdviceCenter.tsx        # 智能运营建议
+│   └── MiniLineChart.tsx       # 迷你折线图
+├── pages/
+│   └── Dashboard.tsx           # 主仪表板（Tab 容器）
+├── utils/
+│   └── dataProcessor.ts        # 数据处理核心（CSV解析、分组、利润计算、建议生成）
+├── lib/
+│   └── utils.ts                # 通用工具函数（格式化等）
+├── types/
+│   └── index.ts                # TypeScript 类型定义
+├── App.tsx                     # 应用入口
+└── main.tsx                    # 渲染入口
+```
+
+## 核心公式
+
+### 利润计算
+
+```
+净利润 = 销售额 - 总成本 - 预估退款损失 - 引流成本总额
+
+总成本 = 商品成本 + 平台技术服务费(0.6%) + 快递费 + 包装耗材 + 运费险 + 商家承担优惠
+（所有成本项均为单件费用 × 销量）
+
+预估退款损失 = 退款收入损失 + 退回运费损失
+  退款收入损失 = 销售额 × 退款率
+  退回运费损失 = 销量 × 退款率 × 单件快递费
+
+退款率优先级：用户手动启用 → 用户值；否则 → 真实退款率（自动回用）
+真实退款率 = 退款成功额 / (有效销售额 + 退款成功额) × 100
+```
+
+### 保本投产比
+
+```
+保本投产 = 定价 / 单件净利润
+单件净利润 = 定价 - 单件总成本 - 单件预估退款损失
+```
+
+### 定价建议
+
+```
+建议售价 = (固定成本 + 退回运费损失) / (1 - 平台扣点率 - 退款率 - 目标利润率)
+
+固定成本 = 成本单价 + 商家优惠 + 快递费 + 包装耗材 + 运费险
+退回运费损失 = 单件快递费 × 退款率
+平台扣点率 = 0.6%
+```
+
+## 可用脚本
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 启动开发服务器（HMR） |
+| `npm run build` | 类型检查 + 生产构建 |
+| `npm run preview` | 预览生产构建 |
+| `npm run lint` | ESLint 代码检查 |
+| `npm run check` | TypeScript 类型检查 |
+
+## License
+
+Private

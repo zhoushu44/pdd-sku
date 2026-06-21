@@ -10,11 +10,10 @@ import {
   DollarSign,
   Lightbulb,
 } from 'lucide-react';
-import type { OrderData, ProductSummary, MarketingDataRow, TimeRange, Advice, AdviceLevel, AdviceCategory } from '../types';
+import type { OrderData, ProductSummary, MarketingDataRow, TimeRange, AdviceLevel, AdviceCategory, PeriodComparison } from '../types';
 import {
   calculateRefundOverview,
   calculateRefundStats,
-  calculatePeriodComparison,
   generateAdvice,
 } from '../utils/dataProcessor';
 
@@ -23,6 +22,7 @@ interface AdviceCenterProps {
   summaries: ProductSummary[];
   marketingData: MarketingDataRow[];
   timeRange: TimeRange;
+  periodComparison: PeriodComparison | null;
 }
 
 const levelConfig: Record<AdviceLevel, {
@@ -73,13 +73,12 @@ const categoryConfig: Record<AdviceCategory, {
   inventory: { label: '库存', icon: AlertTriangle },
 };
 
-const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketingData, timeRange }) => {
-  const adviceList = useMemo<Advice[]>(() => {
+const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketingData, periodComparison }) => {
+  const adviceList = useMemo(() => {
     const refundOverview = calculateRefundOverview(orders);
     const refundStats = calculateRefundStats(orders);
-    const periodComparison = calculatePeriodComparison(orders, timeRange);
     return generateAdvice(summaries, refundOverview, refundStats, marketingData, periodComparison);
-  }, [orders, summaries, marketingData, timeRange]);
+  }, [orders, summaries, marketingData, periodComparison]);
 
   // 按分类统计
   const categoryStats = useMemo(() => {

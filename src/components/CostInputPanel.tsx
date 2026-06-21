@@ -498,23 +498,63 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <DollarSign className="w-4 h-4 text-emerald-400" />
-                    商品定价（元/件）
-                    <span className="text-xs text-gray-500">（用于计算保本投产）</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={tempCostItem.定价 || ''}
-                    onChange={(e) =>
-                      updateTempField('定价', parseFloat(e.target.value) || 0)
-                    }
-                    placeholder="请输入定价"
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    min="0"
-                    step="0.01"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  {/* 定价输入：编辑定价 → 自动算利润率 */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-1.5 text-sm text-gray-300">
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      商品定价（元/件）
+                    </label>
+                    <input
+                      type="number"
+                      value={tempCostItem.定价 || ''}
+                      onChange={(e) =>
+                        updateTempField('定价', parseFloat(e.target.value) || 0)
+                      }
+                      placeholder="输入定价"
+                      className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+
+                  {/* 利润率输入：编辑利润率 → 反推定价 */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-1.5 text-sm text-gray-300">
+                      <Percent className="w-4 h-4 text-blue-400" />
+                      目标利润率（%）
+                    </label>
+                    <input
+                      type="number"
+                      value={modalPreviewData ? Number(modalPreviewData.利润率.toFixed(2)) : ''}
+                      onChange={(e) => {
+                        const rate = Math.min(99, Math.max(-99, parseFloat(e.target.value) || 0));
+                        // 反推定价：P = (固定成本 + 退回运费损失) / (1 - 平台扣点率 - 退款率 - 目标利润率)
+                        const PLATFORM_RATE = 0.006;
+                        const refundRate = (modalPreviewData?.effectiveRefundRate || 0) / 100;
+                        const targetRate = rate / 100;
+                        const fixedCost = (tempCostItem.成本单价 || 0)
+                          + (tempCostItem.商家承担优惠 || 0)
+                          + (tempCostItem.启用快递费 ? (tempCostItem.快递费 || 0) : 0)
+                          + (tempCostItem.启用包装耗材 ? (tempCostItem.包装耗材 || 0) : 0)
+                          + (tempCostItem.启用运费险 ? (tempCostItem.运费险 || 0) : 0);
+                        const returnShipping = (tempCostItem.启用快递费 ? (tempCostItem.快递费 || 0) : 0) * refundRate;
+                        const denominator = 1 - PLATFORM_RATE - refundRate - targetRate;
+                        if (denominator > 0 && fixedCost > 0) {
+                          const suggestedPrice = (fixedCost + returnShipping) / denominator;
+                          updateTempField('定价', Math.round(suggestedPrice * 100) / 100);
+                        }
+                      }}
+                      placeholder="输入利润率"
+                      className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      min="-99"
+                      max="99"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">
+                  定价与利润率双向联动：修改任一项，另一项自动计算
                 </div>
 
                 <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">

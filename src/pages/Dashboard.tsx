@@ -502,6 +502,7 @@ export default function Dashboard() {
             summaries={filteredSummaries}
             marketingData={filteredMarketingData}
             timeRange={timeRange}
+            periodComparison={periodComparison}
           />
         )}
       </main>
