@@ -26,5 +26,4 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 5173
 
-# nginx 默认即监听 0.0.0.0，这里显式声明
-CMD ["nginx", "-g", "daemon off;"]
+# 使用官方 nginx 镜像默认的 CMD ["nginx", "-g", "daemon off;"]，无需覆盖

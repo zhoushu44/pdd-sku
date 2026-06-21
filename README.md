@@ -207,8 +207,8 @@ docker run -d -p 5173:5173 --name trae-project trae-project
 ### 从 Docker Hub 拉取
 
 ```bash
-docker pull <用户名>/trae-project:1.3
-docker run -d -p 5173:5173 --name trae-project <用户名>/trae-project:1.3
+docker pull <用户名>/trae-project:13.4
+docker run -d -p 5173:5173 --name trae-project <用户名>/trae-project:13.4
 ```
 
 ### docker run 常用命令
@@ -239,13 +239,13 @@ docker run -d \
 
 ```bash
 # 1. 拉取新镜像
-docker pull <用户名>/trae-project:1.3
+docker pull <用户名>/trae-project:13.4
 
 # 2. 停止并删除旧容器
 docker stop trae-project && docker rm trae-project
 
 # 3. 用新镜像启动容器
-docker run -d --name trae-project --restart unless-stopped -p 5173:5173 <用户名>/trae-project:1.3
+docker run -d --name trae-project --restart unless-stopped -p 5173:5173 <用户名>/trae-project:13.4
 ```
 
 #### 本地代码更新后重新构建
@@ -304,7 +304,7 @@ docker exec -it trae-project sh
 
 - **触发条件**：push 到 `main` 或 `master` 分支
 - **自动构建**：多阶段 Docker 构建（node:20 构建 + nginx:1.27 服务）
-- **自动推送**：同时打上 `1.1` 和 `latest` 标签推送到 Docker Hub
+- **自动推送**：同时打上 `1.3` 和 `latest` 标签推送到 Docker Hub
 - **缓存加速**：启用 GitHub Actions 层缓存
 
 ### 所需 GitHub Secrets
