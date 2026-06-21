@@ -26,4 +26,5 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 5173
 
-# 使用官方 nginx 镜像默认的 CMD ["nginx", "-g", "daemon off;"]，无需覆盖
+# daemon off; 已写入 nginx.conf，CMD 只需 nginx，无需 -g 参数
+CMD ["nginx"]
