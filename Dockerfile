@@ -24,7 +24,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # 将构建产物拷贝到 nginx 服务目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 5173
 
 # nginx 默认即监听 0.0.0.0，这里显式声明
 CMD ["nginx", "-g", "daemon off;"]
