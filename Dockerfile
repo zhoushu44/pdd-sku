@@ -26,4 +26,5 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 5173
 
-# 使用官方 nginx 镜像默认 CMD ["nginx", "-g", "daemon off;"]（exec 形式，不会被 shell 拆分）
+# 显式使用 exec 形式，避免启动参数中的 "daemon off;" 被错误拆分
+CMD ["nginx", "-g", "daemon off;"]
