@@ -5,17 +5,16 @@ import CostInputPanel from '../components/CostInputPanel';
 import MarketingAnalysis from '../components/MarketingAnalysis';
 import RefundAnalysis from '../components/RefundAnalysis';
 import AdviceCenter from '../components/AdviceCenter';
-import { parseOrderData, groupBySpec, calculateProfit, parseMarketingCSV, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison } from '../utils/dataProcessor';
+import { parseOrderData, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison } from '../utils/dataProcessor';
 import { OrderData, DetailedCostConfig, MarketingDataRow, TimeRange } from '../types';
-import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, FileSpreadsheet, Calendar, Search, X, RefreshCcw, Lightbulb } from 'lucide-react';
+import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, RefreshCcw, Lightbulb } from 'lucide-react';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<OrderData[]>([]);
-  const [marketingData, setMarketingData] = useState<MarketingDataRow[]>([]);
+  const [marketingData] = useState<MarketingDataRow[]>([]);
   const [costConfig, setCostConfig] = useState<DetailedCostConfig>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice'>('overview');
-  const [uploadType, setUploadType] = useState<'sales' | 'marketing'>('sales');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [searchProductId, setSearchProductId] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -151,52 +150,6 @@ export default function Dashboard() {
     e.target.value = '';
   };
 
-  // 处理推广数据文件上传（支持CSV和Excel）
-  const handleMarketingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setLoading(true);
-      
-      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
-        // CSV/TXT格式
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const text = event.target?.result as string;
-          const data = parseMarketingCSV(text);
-          setMarketingData(data);
-          setActiveTab('marketing');
-          setLoading(false);
-        };
-        reader.readAsText(file);
-      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        // Excel格式 - 使用动态导入xlsx库
-        const XLSX = await import('xlsx');
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // 转换为CSV再解析
-        const csvText = XLSX.utils.sheet_to_csv(worksheet);
-        const data = parseMarketingCSV(csvText);
-        setMarketingData(data);
-        setActiveTab('marketing');
-        setLoading(false);
-      } else {
-        alert('请上传 CSV、TXT 或 Excel 文件');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('解析推广数据失败:', error);
-      alert('文件解析失败，请检查格式');
-      setLoading(false);
-    }
-
-    // 重置input
-    e.target.value = '';
-  };
 
   if (loading) {
     return (
@@ -235,59 +188,16 @@ export default function Dashboard() {
                 刷新数据
               </button>
 
-              {/* 上传区域 */}
-              <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-1 border border-slate-700/50">
-                {/* 类型切换 */}
-                <div className="flex bg-slate-700/30 rounded-md p-0.5">
-                  <button
-                    onClick={() => setUploadType('sales')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all ${
-                      uploadType === 'sales'
-                        ? 'bg-green-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <ShoppingCart className="w-3.5 h-3.5" />
-                    销售数据
-                  </button>
-                  <button
-                    onClick={() => setUploadType('marketing')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all ${
-                      uploadType === 'marketing'
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Megaphone className="w-3.5 h-3.5" />
-                    推广数据
-                  </button>
-                </div>
-
-                {/* 上传按钮 */}
-                {uploadType === 'sales' ? (
-                  <label className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    上传CSV
-                    <input
-                      type="file"
-                      accept=".csv,.txt"
-                      className="hidden"
-                      onChange={handleSalesFileUpload}
-                    />
-                  </label>
-                ) : (
-                  <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer">
-                    <FileSpreadsheet className="w-4 h-4" />
-                    上传推广数据
-                    <input
-                      type="file"
-                      accept=".csv,.xlsx,.xls,.txt"
-                      className="hidden"
-                      onChange={handleMarketingFileUpload}
-                    />
-                  </label>
-                )}
-              </div>
+              <label className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer">
+                <Upload className="w-4 h-4" />
+                上传销售 CSV
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  className="hidden"
+                  onChange={handleSalesFileUpload}
+                />
+              </label>
 
               <div className="text-sm text-slate-400">
                 更新: {new Date().toLocaleDateString('zh-CN')}

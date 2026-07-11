@@ -39,6 +39,8 @@ export interface ProductSummary {
   // 详细成本项
   成本单价: number;      // 用户输入的商品成本单价
   总商品成本: number;    // 成本单价 * 销量
+  人工成本: number;        // 人工成本单价 * 销量
+  运营成本: number;        // 运营成本单价 * 销量
   平台技术服务费: number;// 统一 0.6% * 销售额
   商家承担优惠: number;   // 用户输入的商家承担优惠金额
   快递费: number;         // 用户输入的快递费（单件或总费用）
@@ -63,6 +65,8 @@ export interface CostItem {
 
   // 可选成本项
   商家承担优惠?: number;  // 商家承担的优惠金额
+  人工成本?: number;      // 人工成本（元/件）
+  运营成本?: number;      // 运营成本（元/件）
   快递费?: number;        // 快递费（可选）
   包装耗材?: number;      // 包装耗材（可选）
   运费险?: number;        // 商家版运费险（可选）

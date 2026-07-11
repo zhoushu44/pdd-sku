@@ -259,6 +259,8 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
       // 详细成本项（默认值，由calculateProfit填充）
       成本单价: 0,
       总商品成本: 0,
+      人工成本: 0,
+      运营成本: 0,
       平台技术服务费: 0,
       商家承担优惠: 0,
       快递费: 0,
@@ -338,6 +340,8 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
 
   // 1. 商品成本 = 成本单价 × 销量
   const totalProductCost = (costItem.成本单价 || 0) * summary.销量;
+  const laborCost = (costItem.人工成本 || 0) * summary.销量;
+  const operatingCost = (costItem.运营成本 || 0) * summary.销量;
 
   // 2. 平台技术服务费（固定 0.6%）
   const platformFeeRate = 0.006; // 0.6%
@@ -356,7 +360,7 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
   const shippingInsurance = (costItem.启用运费险 ? (costItem.运费险 || 0) : 0) * summary.销量;
 
   // 7. 计算总成本（所有项均为总额）
-  const totalCost = Math.round((totalProductCost + platformFee + merchantDiscount + shippingFee + packagingCost + shippingInsurance) * 100) / 100;
+  const totalCost = Math.round((totalProductCost + laborCost + operatingCost + platformFee + merchantDiscount + shippingFee + packagingCost + shippingInsurance) * 100) / 100;
 
   // 8. 预估退款损失 = 退款收入损失 + 退回运费损失
   // 优先级：用户手动启用并输入 → 用用户值（假设分析）；否则 → 自动用真实退款率
@@ -388,6 +392,8 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
   if (unitPrice > 0 && unitCost > 0) {
     const unitPlatformFee = unitPrice * 0.006;
     const unitOptionalCost = (costItem.商家承担优惠 || 0)
+      + (costItem.人工成本 || 0)
+      + (costItem.运营成本 || 0)
       + (costItem.启用快递费 ? (costItem.快递费 || 0) : 0)
       + (costItem.启用包装耗材 ? (costItem.包装耗材 || 0) : 0)
       + (costItem.启用运费险 ? (costItem.运费险 || 0) : 0);
@@ -408,6 +414,8 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
     ...summary,
     成本单价: costItem.成本单价 || 0,
     总商品成本: Math.round(totalProductCost * 100) / 100,
+    人工成本: Math.round(laborCost * 100) / 100,
+    运营成本: Math.round(operatingCost * 100) / 100,
     平台技术服务费: platformFee,
     商家承担优惠: Math.round(merchantDiscount * 100) / 100,
     快递费: Math.round(shippingFee * 100) / 100,
@@ -434,6 +442,9 @@ export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
 
   // 解析表头
   const headers = parseCSVLine(lines[0]);
+  if (!headers.includes('商品ID') || !headers.includes('总营销花费(元)')) {
+    return [];
+  }
   
   // 解析数据行
   const data: MarketingDataRow[] = [];

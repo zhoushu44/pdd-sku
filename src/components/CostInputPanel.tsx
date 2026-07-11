@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Calculator,
-  Save,
   X,
+  Upload,
+  Download,
   Package,
   Truck,
   Shield,
@@ -30,6 +31,8 @@ const defaultCostItem: CostItem = {
   成本单价: 0,
   定价: 0,
   商家承担优惠: 0,
+  人工成本: 0,
+  运营成本: 0,
   快递费: 0,
   包装耗材: 0,
   运费险: 0,
@@ -54,7 +57,6 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
   const [editingSpec, setEditingSpec] = useState<string>('');
   const [tempCostItem, setTempCostItem] = useState<CostItem>(cloneCostItem());
   const [batchSourceSpec, setBatchSourceSpec] = useState<string>('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [sortField, setSortField] = useState<'净利润' | '利润率' | '保本投产' | null>(null);
   const [targetProfitRate, setTargetProfitRate] = useState<number>(20);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -72,15 +74,114 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
     }
   }, [onCostChange]);
 
-  const saveToLocalStorage = useCallback(() => {
+  const saveToLocalStorage = useCallback((config: DetailedCostConfig) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(costConfig));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     } catch (error) {
       console.error('保存成本配置失败:', error);
     }
-  }, [costConfig]);
+  }, []);
+
+  const handleCostConfigImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error('请上传 XLSX 或 XLS 成本配置文件');
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!worksheet) throw new Error('工作簿不包含可读取的工作表');
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
+      if (rows.length === 0 || !Object.prototype.hasOwnProperty.call(rows[0], '规格')) {
+        throw new Error('表格必须包含“规格”列');
+      }
+
+      const validSpecs = new Set(productSummaries.map(item => item.规格));
+      const nextConfig = { ...costConfig };
+      let matched = 0;
+      rows.forEach(row => {
+        const spec = String(row.规格 ?? '').trim();
+        if (!spec || !validSpecs.has(spec)) return;
+        const numberValue = (name: string) => {
+          const value = Number(row[name]);
+          return Number.isFinite(value) && value >= 0 ? value : 0;
+        };
+        nextConfig[spec] = {
+          ...cloneCostItem(nextConfig[spec]),
+          成本单价: numberValue('原材料成本'),
+          人工成本: numberValue('人工成本'),
+          运营成本: numberValue('运营成本'),
+          商家承担优惠: numberValue('商家承担优惠'),
+          快递费: numberValue('快递费'),
+          包装耗材: numberValue('包装耗材'),
+          运费险: numberValue('运费险'),
+          定价: numberValue('定价'),
+          退款率: numberValue('退款率'),
+          启用快递费: numberValue('快递费') > 0,
+          启用包装耗材: numberValue('包装耗材') > 0,
+          启用运费险: numberValue('运费险') > 0,
+          启用退款率: numberValue('退款率') > 0,
+        };
+        matched += 1;
+      });
+      if (matched === 0) throw new Error('没有匹配到当前利润表中的规格，请检查“规格”列');
+      setCostConfig(nextConfig);
+      onCostChange(nextConfig);
+      saveToLocalStorage(nextConfig);
+      alert(`已导入 ${matched} 条成本配置；未匹配规格未导入。`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '成本配置导入失败，请检查文件内容');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleProfitExport = async () => {
+    const XLSX = await import('xlsx');
+    const detailRows = productSummaries.map(item => {
+      const config = cloneCostItem(costConfig[item.规格]);
+      const summary = calculateSpecSummary(item.规格);
+      return {
+        商品ID: item.商品ID,
+        规格: item.规格,
+        定价: config.定价 || 0,
+        原材料成本: config.成本单价 || 0,
+        人工成本: config.人工成本 || 0,
+        运营成本: config.运营成本 || 0,
+        商家承担优惠: config.商家承担优惠 || 0,
+        快递费: config.启用快递费 ? config.快递费 || 0 : 0,
+        包装耗材: config.启用包装耗材 ? config.包装耗材 || 0 : 0,
+        运费险: config.启用运费险 ? config.运费险 || 0 : 0,
+        退款率: summary?.effectiveRefundRate || 0,
+        单件总成本: summary?.单件总成本 || 0,
+        单件预估退款损失: summary?.预估退款损失 || 0,
+        单件净利润: summary?.净利润 || 0,
+        利润率: summary?.利润率 || 0,
+        保本投产: summary?.保本投产 ?? '',
+      };
+    });
+    const analysisRows = detailRows.map(row => ({
+      规格: row.规格,
+      收入项目: '定价',
+      单件收入: row.定价,
+      成本合计: row.单件总成本,
+      退款损失: row.单件预估退款损失,
+      单件净利润: row.单件净利润,
+      利润率: row.利润率,
+    }));
+    const formulaRows = [
+      { 项目: '单件总成本', 计算公式: '原材料成本 + 人工成本 + 运营成本 + 商家承担优惠 + 快递费 + 包装耗材 + 运费险 + 定价 × 0.6%' },
+      { 项目: '单件预估退款损失', 计算公式: '定价 × 退款率 + 快递费 × 退款率' },
+      { 项目: '单件净利润', 计算公式: '定价 - 单件总成本 - 单件预估退款损失' },
+      { 项目: '利润率', 计算公式: '单件净利润 ÷ 定价 × 100%' },
+      { 项目: '保本投产', 计算公式: '定价 ÷ 单件净利润（净利润大于 0 时）' },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows), '成本利润明细');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(analysisRows), '利润分析数据');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(formulaRows), '计算公式');
+    XLSX.writeFile(workbook, `成本与利润计算_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const openEditModal = useCallback((spec: string) => {
     setEditingSpec(spec);
@@ -98,7 +199,7 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
     const newConfig = { ...costConfig, [editingSpec]: tempCostItem };
     setCostConfig(newConfig);
     onCostChange(newConfig);
-    saveToLocalStorage();
+    saveToLocalStorage(newConfig);
     closeModal();
   }, [costConfig, editingSpec, tempCostItem, onCostChange, saveToLocalStorage]);
 
@@ -168,6 +269,8 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
     let 可选成本总和 = 0;
     if (tempCostItem.商家承担优惠) 可选成本总和 += tempCostItem.商家承担优惠;
+    if (tempCostItem.人工成本) 可选成本总和 += tempCostItem.人工成本;
+    if (tempCostItem.运营成本) 可选成本总和 += tempCostItem.运营成本;
     if (tempCostItem.启用快递费 && tempCostItem.快递费) 可选成本总和 += tempCostItem.快递费;
     if (tempCostItem.启用包装耗材 && tempCostItem.包装耗材) 可选成本总和 += tempCostItem.包装耗材;
     if (tempCostItem.启用运费险 && tempCostItem.运费险) 可选成本总和 += tempCostItem.运费险;
@@ -201,7 +304,7 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
     });
     setCostConfig(newConfig);
     onCostChange(newConfig);
-    saveToLocalStorage();
+    saveToLocalStorage(newConfig);
     setBatchSourceSpec('');
   };
 
@@ -270,20 +373,25 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
   return (
     <div className="bg-slate-900 rounded-lg shadow-xl p-6 border border-slate-700">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <Calculator className="w-6 h-6 text-blue-400" />
-          <h2 className="text-xl font-bold text-white">成本与利润计算器</h2>
+          <div>
+            <h2 className="text-xl font-bold text-white">成本与利润计算器</h2>
+            <p className="mt-1 text-xs text-slate-400">成本配置会在修改后自动保存</p>
+          </div>
         </div>
-        <button
-          onClick={saveToLocalStorage}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-            saveSuccess ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
-        >
-          <Save className="w-4 h-4" />
-          {saveSuccess ? '已保存' : '保存配置'}
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700">
+            <Upload className="w-4 h-4" />
+            导入 XLSX
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleCostConfigImport} />
+          </label>
+          <button onClick={handleProfitExport} className="flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-white transition-colors hover:bg-cyan-700">
+            <Download className="w-4 h-4" />
+            导出结果 XLSX
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-700">
@@ -534,6 +642,8 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
                         const refundRate = (modalPreviewData?.effectiveRefundRate || 0) / 100;
                         const targetRate = rate / 100;
                         const fixedCost = (tempCostItem.成本单价 || 0)
+                          + (tempCostItem.人工成本 || 0)
+                          + (tempCostItem.运营成本 || 0)
                           + (tempCostItem.商家承担优惠 || 0)
                           + (tempCostItem.启用快递费 ? (tempCostItem.快递费 || 0) : 0)
                           + (tempCostItem.启用包装耗材 ? (tempCostItem.包装耗材 || 0) : 0)
@@ -592,6 +702,17 @@ const CostInputPanel: React.FC<CostInputPanelProps> = ({
                       min="0"
                       step="0.01"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-sm text-gray-300">
+                      人工成本（元/件）
+                      <input type="number" value={tempCostItem.人工成本 || ''} onChange={(e) => updateTempField('人工成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" min="0" step="0.01" />
+                    </label>
+                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-sm text-gray-300">
+                      运营成本（元/件）
+                      <input type="number" value={tempCostItem.运营成本 || ''} onChange={(e) => updateTempField('运营成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" min="0" step="0.01" />
+                    </label>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
