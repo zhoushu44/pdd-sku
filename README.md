@@ -345,7 +345,7 @@ deploy.bat
 docker-compose up -d --build
 ```
 
-访问 `http://localhost:8080` 即可。
+访问 `http://localhost:5173` 即可。
 
 **部署文件说明：**
 - `Dockerfile` - 多阶段构建（Node.js 构建 + Nginx 服务）
@@ -376,9 +376,9 @@ docker-compose restart
 
 #### 宝塔 Docker 面板部署（推荐）
 
-1. 在宝塔面板 **Docker → 镜像 → 拉取镜像**，输入 `<用户名>/trae-project:4.0` 或 `<用户名>/trae-project:latest`
+1. 在宝塔面板 **Docker → 镜像 → 拉取镜像**，输入 `<用户名>/trae-project:4.1` 或 `<用户名>/trae-project:latest`
 2. **Docker → 容器 → 创建容器**，选择刚拉取的镜像
-3. 端口映射设置为 `8080:80`（或自定义端口）
+3. 端口映射设置为 `5173:5173`（或自定义端口）
 4. **启动命令（Command）和入口点（Entrypoint）必须留空**，让容器使用镜像内置的默认启动命令
 5. 勾选"自动重启"策略
 6. 创建容器即可访问
@@ -388,23 +388,23 @@ docker-compose restart
 #### 命令行部署
 
 ```bash
-# 拉取镜像（使用 4.0 版本）
-docker pull <用户名>/trae-project:4.0
+# 拉取镜像（使用 4.1 版本）
+docker pull <用户名>/trae-project:4.1
 
 # 或使用最新版本
 docker pull <用户名>/trae-project:latest
 
-# 启动容器（宿主机 8080 → 容器 80）
+# 启动容器（宿主机 5173 → 容器 5173）
 docker run -d \
   --name trae-project \
   --restart unless-stopped \
-  -p 8080:80 \
+  -p 5173:5173 \
   --memory=512m \
   --cpus=1 \
-  <用户名>/trae-project:4.0
+  <用户名>/trae-project:4.1
 ```
 
-访问 `http://localhost:8080` 即可。
+访问 `http://localhost:5173` 即可。
 
 #### 本地构建镜像
 
@@ -413,10 +413,10 @@ docker run -d \
 docker build -t trae-project .
 
 # 启动容器
-docker run -d -p 8080:80 --name trae-project trae-project
+docker run -d -p 5173:5173 --name trae-project trae-project
 ```
 
-### 更新部署
+访问 `http://localhost:5173` 即可。### 更新部署
 
 **Docker Compose：**
 
@@ -432,13 +432,13 @@ docker-compose up -d --build
 
 ```bash
 # 1. 拉取新镜像
-docker pull <用户名>/trae-project:4.0
+docker pull <用户名>/trae-project:4.1
 
 # 2. 停止并删除旧容器
 docker stop trae-project && docker rm trae-project
 
 # 3. 用新镜像启动容器
-docker run -d --name trae-project --restart unless-stopped -p 8080:80 <用户名>/trae-project:4.0
+docker run -d --name trae-project --restart unless-stopped -p 5173:5173 <用户名>/trae-project:4.1
 ```
 
 宝塔面板更新：**Docker → 镜像 → 拉取镜像**（覆盖旧版本），然后删除旧容器、用新镜像重新创建即可。
@@ -463,19 +463,19 @@ docker exec -it trae-project sh
 容器启动后无法访问时，按顺序检查：
 
 1. **容器状态**：`docker ps` 确认容器在运行；若不断重启，检查 `docker logs` 是否出现 `nginx: invalid option: "off;"` — 这说明启动命令被错误覆盖，需清空 Command 字段
-2. **端口映射**：`docker port <容器名>` 确认 `0.0.0.0:8080->80/tcp` 存在
-3. **本地访问**：在服务器上执行 `curl http://localhost:80/` 验证容器内服务正常
+2. **端口映射**：`docker port <容器名>` 确认 `0.0.0.0:5173->5173/tcp` 存在
+3. **本地访问**：在服务器上执行 `curl http://localhost:5173/` 验证容器内服务正常
 4. **安全组**：云服务器控制台安全组规则放行对应端口入站（TCP）
-5. **防火墙**：服务器系统防火墙放行（`firewall-cmd --add-port=8080/tcp --permanent && firewall-cmd --reload`）
+5. **防火墙**：服务器系统防火墙放行（`firewall-cmd --add-port=5173/tcp --permanent && firewall-cmd --reload`）
 
 ### 端口说明
 
 | 项 | 端口 | 说明 |
 |----|------|------|
-| 容器内 nginx | 80 | 由 `nginx.conf` 中 `listen 80` 决定 |
-| Dockerfile EXPOSE | 80 | 仅作声明，实际访问由 `-p` 映射决定 |
-| 宿主机访问 | 自定义 | 通过 `-p 宿主机端口:80` 映射 |
-| Docker Compose | 8080 | 默认映射 `8080:80`，可修改 `docker-compose.yml` |
+| 容器内 nginx | 5173 | 由 `nginx.conf` 中 `listen 5173` 决定 |
+| Dockerfile EXPOSE | 5173 | 仅作声明，实际访问由 `-p` 映射决定 |
+| 宿主机访问 | 自定义 | 通过 `-p 宿主机端口:5173` 映射 |
+| Docker Compose | 5173 | 默认映射 `5173:5173`，可修改 `docker-compose.yml` |
 
 ---
 
@@ -485,7 +485,7 @@ docker exec -it trae-project sh
 
 - **触发条件**：push 到 `main` 或 `master` 分支
 - **自动构建**：多阶段 Docker 构建（node:20 构建 + nginx:1.27 服务）
-- **自动推送**：同时打上 `4.0` 和 `latest` 标签推送到 Docker Hub
+- **自动推送**：同时打上 `4.1` 和 `latest` 标签推送到 Docker Hub
 - **缓存加速**：启用 GitHub Actions 层缓存
 
 > 💡 **重要**：所有 Docker 镜像构建和推送操作都由 GitHub Actions 自动完成，本地无需执行任何推送操作。
