@@ -118,6 +118,43 @@ const RefundAnalysis: React.FC<RefundAnalysisProps> = ({ orders }) => {
         </div>
       </div>
 
+      {/* 发货前/后退款对比 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="w-4 h-4 text-amber-400" />
+            <h3 className="text-sm font-medium text-amber-300">发货前退款（无运费损失）</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs text-slate-400 mb-1">订单数</div>
+              <div className="text-lg font-bold text-amber-300">{formatNumber(overview.发货前退款订单数)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-1">退款金额</div>
+              <div className="text-lg font-bold text-amber-300">{formatAmount(overview.发货前退款金额)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingDown className="w-4 h-4 text-red-400" />
+            <h3 className="text-sm font-medium text-red-300">发货后退款（有运费损失）</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs text-slate-400 mb-1">订单数</div>
+              <div className="text-lg font-bold text-red-300">{formatNumber(overview.发货后退款订单数)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-1">退款金额</div>
+              <div className="text-lg font-bold text-red-300">{formatAmount(overview.发货后退款金额)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 高退款率SKU预警 */}
       {highRiskSkus.length > 0 && (
         <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
@@ -194,6 +231,8 @@ const RefundAnalysis: React.FC<RefundAnalysisProps> = ({ orders }) => {
                 <th className="px-3 py-2.5 text-right font-medium">退款成功</th>
                 <th className="px-3 py-2.5 text-right font-medium">退款率</th>
                 <th className="px-3 py-2.5 text-right font-medium">退款损失额</th>
+                <th className="px-3 py-2.5 text-right font-medium">发货前退款</th>
+                <th className="px-3 py-2.5 text-right font-medium">发货后退款</th>
                 <th className="px-3 py-2.5 text-right font-medium">有效销售额</th>
                 <th className="px-3 py-2.5 text-right font-medium">损失占比</th>
               </tr>
@@ -212,6 +251,14 @@ const RefundAnalysis: React.FC<RefundAnalysisProps> = ({ orders }) => {
                   </td>
                   <td className="px-3 py-2.5 text-right text-red-400 font-mono">
                     {formatAmount(stat.退款成功额)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-amber-400 font-mono">
+                    {stat.发货前退款订单数}
+                    <div className="text-[10px] text-slate-500">{formatAmount(stat.发货前退款金额)}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-red-400 font-mono">
+                    {stat.发货后退款订单数}
+                    <div className="text-[10px] text-slate-500">{formatAmount(stat.发货后退款金额)}</div>
                   </td>
                   <td className="px-3 py-2.5 text-right text-emerald-400 font-mono">
                     {formatAmount(stat.销售额)}

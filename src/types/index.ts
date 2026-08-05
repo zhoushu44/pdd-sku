@@ -48,6 +48,7 @@ export interface ProductSummary {
   运费险: number;         // 用户输入的商家版运费险费用
   退款率: number;         // 可选，退款比例 (0-100)，用户手动输入
   真实退款率: number;     // 从订单数据自动计算的退款率（按金额：退款成功额 / 总销售额 * 100）
+  发货后退款率: number;   // 发货后退款额 / (有效销售额 + 退款成功额) * 100（用于计算运费损失）
   订单引流成本: number;   // 单件：该商品ID总营销费用 / 该商品ID总订单数
 
   // 计算结果
@@ -114,12 +115,6 @@ export interface MarketingDataRow {
   实际净投产比: number;
   净成交笔数: number;
   每笔净成交花费: number;
-  净交易额占比: string;
-  净成交笔数占比: string;
-  每笔净成交金额: number;
-  结算交易额: number;
-  结算投产比: number;
-  结算成交笔数: number;
   退款豁免率: string;
   退单豁免率: string;
   净推广交易额: number;
@@ -164,6 +159,11 @@ export interface RefundStat {
   退款成功额: number;     // 退款成功订单的商家实收金额（负向损失）
   销售额: number;         // 有效订单销售额
   退款损失占比: number;   // 退款成功额 / (销售额 + 退款成功额) * 100
+  // 新增：区分发货前/后退款
+  发货前退款订单数: number;
+  发货后退款订单数: number;
+  发货前退款金额: number;
+  发货后退款金额: number;
 }
 
 // 退款总览统计
@@ -175,6 +175,11 @@ export interface RefundOverview {
   退款成功总金额: number;
   退款损失占比: number;
   高退款率SKU数: number; // 退款率 > 20%
+  // 新增：区分发货前/后退款
+  发货前退款订单数: number;
+  发货后退款订单数: number;
+  发货前退款金额: number;
+  发货后退款金额: number;
 }
 
 // ============ 环比/同比对比 ============
@@ -225,4 +230,84 @@ export interface BudgetSuggestion {
   建议说明: string;
   预计调整比例: number;   // 建议调整比例（%），正数增加，负数减少
   预计影响利润: number;   // 调整后预计利润变化
+}
+
+// ============ 一键 AI：价格 & 分析 ============
+
+// AI 建议项类型
+export type AISuggestionType = 'overall' | 'pricing' | 'addSku' | 'bundle';
+export type AILevel = 'critical' | 'warning' | 'info' | 'success';
+
+// 单条 AI 分析建议
+export interface AISuggestion {
+  type: AISuggestionType;
+  level: AILevel;
+  title: string;
+  detail: string;
+  action: string;       // 具体行动建议
+  metric?: string;      // 关键指标
+  reference?: string;   // 论文/数据来源
+}
+
+// AI 价格计算输入参数
+export interface AIPriceInput {
+  成本单价?: number;      // 统一成本（留空则沿用各 SKU 已有成本）
+  快递费?: number;        // 统一快递费
+  包装耗材?: number;      // 统一包装耗材
+  目标利润率: number;     // 目标利润率（%）
+  应用范围: 'all' | 'empty'; // all=全部SKU，empty=仅未定价的SKU
+}
+
+// AI 价格计算结果（单个 SKU）
+export interface AIPriceResult {
+  规格: string;
+  原定价: number;
+  建议定价: number;
+  固定成本: number;      // 单件固定成本
+  退回运费损失: number;  // 单件退回运费损失
+  预估利润率: number;    // 按建议定价预估的利润率（%）
+  skipped: boolean;      // 是否跳过（无成本数据）
+  reason?: string;       // 跳过原因
+}
+
+// 套餐组合建议（基于捆绑销售论文模型）
+export interface BundleSuggestion {
+  商品ID: string;
+  商品名称: string;
+  组合规格: string[];
+  单买总价: number;
+  建议套餐价: number;
+  折扣率: number;
+  预估套餐利润率: number;
+  理由: string;
+}
+
+export interface AIModelConfig {
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+export type GeneratedSKUType = '低价引流' | '标准款' | '利润款' | '规格扩展' | '套餐组合' | '库存策略';
+
+export interface GeneratedAISKU {
+  id: string;
+  规格: string;
+  商品名称: string;
+  类型: GeneratedSKUType;
+  成本单价: number;
+  快递费: number;
+  包装耗材: number;
+  人工成本: number;
+  定价: number;
+  利润率: number;
+  建议理由: string;
+  selected: boolean;
+  组合规格?: string[];
+}
+
+export interface AIApplyPayload {
+  config: DetailedCostConfig;
+  summaries: ProductSummary[];
+  bundles: BundleSuggestion[];
 }

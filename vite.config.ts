@@ -8,6 +8,15 @@ export default defineConfig({
   build: {
     sourcemap: 'hidden',
   },
+  server: {
+    proxy: {
+      '/api/ai': {
+        target: 'https://token.86969678.xyz',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ai/, '/v1'),
+      },
+    },
+  },
   plugins: [
     react({
       babel: {

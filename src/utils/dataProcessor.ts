@@ -1,4 +1,4 @@
-import { OrderData, ProductSummary, DetailedCostConfig, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion } from '../types';
+import { OrderData, ProductSummary, DetailedCostConfig, CostItem, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion, AISuggestion, AIPriceInput, AIPriceResult, BundleSuggestion } from '../types';
 
 /**
  * 解析日期字符串为本地时间 Date 对象，避免时区偏差
@@ -210,6 +210,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
     商品名称: string;
     商品ID: string;
     退款成功额: number;   // 退款成功订单的商家实收金额
+    发货后退款额: number; // 发货后退款成功的商家实收金额（用于计算运费损失）
     总订单数: number;     // 含退款的全部订单数
   }>();
 
@@ -222,6 +223,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
       商品名称: order.商品,
       商品ID: order.商品id,
       退款成功额: 0,
+      发货后退款额: 0,
       总订单数: 0,
     };
 
@@ -235,6 +237,10 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
 
     if (order.售后状态.includes('退款成功')) {
       existing.退款成功额 += order.商家实收金额;
+      // 发货后退款才产生运费损失
+      if (order.发货时间 && order.发货时间.trim() !== '') {
+        existing.发货后退款额 += order.商家实收金额;
+      }
     }
 
     specMap.set(spec, existing);
@@ -246,6 +252,8 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
     // 真实退款率（按金额）：退款成功额 / (有效销售额 + 退款成功额) * 100
     const totalAmount = data.销售额 + data.退款成功额;
     const 真实退款率 = totalAmount > 0 ? (data.退款成功额 / totalAmount) * 100 : 0;
+    // 发货后退款率（按金额）：发货后退款额 / (有效销售额 + 退款成功额) * 100
+    const 发货后退款率 = totalAmount > 0 ? (data.发货后退款额 / totalAmount) * 100 : 0;
 
     const summary: ProductSummary = {
       规格: spec,
@@ -268,6 +276,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
       运费险: 0,
       退款率: 0,
       真实退款率: Math.round(真实退款率 * 100) / 100,
+      发货后退款率: Math.round(发货后退款率 * 100) / 100,
       订单引流成本: 0,
       总成本: 0,
       预估退款损失: 0,
@@ -362,18 +371,15 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
   // 7. 计算总成本（所有项均为总额）
   const totalCost = Math.round((totalProductCost + laborCost + operatingCost + platformFee + merchantDiscount + shippingFee + packagingCost + shippingInsurance) * 100) / 100;
 
-  // 8. 预估退款损失 = 退款收入损失 + 退回运费损失
-  // 优先级：用户手动启用并输入 → 用用户值（假设分析）；否则 → 自动用真实退款率
+  // 8. 预估退款损失 = 仅退回运费损失（发货后退款才产生运费损失，发货前退款无损失）
+  const unitShippingFee = costItem.启用快递费 ? (costItem.快递费 || 0) : 0;
+  const afterShipRefundRate = summary.发货后退款率 || 0;
+  const estimatedRefundLoss = unitShippingFee > 0
+    ? Math.round(summary.销量 * afterShipRefundRate / 100 * unitShippingFee * 100) / 100
+    : 0;
+  // 退款率（用于显示和SKU单件计算）
   const userRefundRate = costItem.启用退款率 ? (costItem.退款率 || 0) : 0;
   const effectiveRefundRate = costItem.启用退款率 ? userRefundRate : (summary.真实退款率 || 0);
-  // 退款收入损失 = 销售额 × 退款率
-  const refundRevenueLoss = summary.销售额 * effectiveRefundRate / 100;
-  // 退回运费损失 = 退货数量 × 单件快递费（退回运费 = 发送快递费）
-  const unitShippingFee = costItem.启用快递费 ? (costItem.快递费 || 0) : 0;
-  const returnShippingLoss = unitShippingFee > 0
-    ? summary.销量 * effectiveRefundRate / 100 * unitShippingFee
-    : 0;
-  const estimatedRefundLoss = Math.round((refundRevenueLoss + returnShippingLoss) * 100) / 100;
 
   // 9. 订单引流成本总额 = 订单引流成本 × 订单数（来自营销数据合并）
   const 引流成本总额 = Math.round(((summary.订单引流成本 || 0) * summary.订单数) * 100) / 100;
@@ -398,14 +404,10 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
       + (costItem.启用包装耗材 ? (costItem.包装耗材 || 0) : 0)
       + (costItem.启用运费险 ? (costItem.运费险 || 0) : 0);
     const unitTotalCost = unitCost + unitPlatformFee + unitOptionalCost;
-    // 退款率优先级同上：用户启用 → 用户值；否则 → 真实退款率
-    const unitRefundRate = costItem.启用退款率 ? (costItem.退款率 || 0) : (summary.真实退款率 || 0);
-    // 单件退款损失 = 退款收入损失 + 退回运费损失（与 CostInputPanel 一致）
-    const unitRefundRevenueLoss = unitRefundRate > 0 ? unitPrice * (unitRefundRate / 100) : 0;
-    const unitReturnShippingLoss = unitShippingFee > 0 && unitRefundRate > 0
-      ? unitShippingFee * (unitRefundRate / 100)
+    const unitAfterShipRefundRate = summary.发货后退款率 || 0;
+    const unitRefundLoss = unitShippingFee > 0 && unitAfterShipRefundRate > 0
+      ? unitShippingFee * (unitAfterShipRefundRate / 100)
       : 0;
-    const unitRefundLoss = unitRefundRevenueLoss + unitReturnShippingLoss;
     skuNetProfit = Math.round((unitPrice - unitTotalCost - unitRefundLoss) * 100) / 100;
   }
 
@@ -440,19 +442,27 @@ export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
     return [];
   }
 
-  // 解析表头
-  const headers = parseCSVLine(lines[0]);
-  if (!headers.includes('商品ID') || !headers.includes('总营销花费(元)')) {
+  // 定位表头：Excel 导出的说明行可能位于表头前后
+  const headerIndex = lines.findIndex(line => {
+    const headers = parseCSVLine(line);
+    return headers.includes('商品ID') && headers.includes('总营销花费(元)');
+  });
+  if (headerIndex < 0) {
     return [];
   }
+  const headers = parseCSVLine(lines[headerIndex]);
   
-  // 解析数据行
+  // 解析数据行，并清理「全店托管」说明/合计行
   const data: MarketingDataRow[] = [];
   
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerIndex + 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
     
-    if (values.length < headers.length || !values[0].trim()) {
+    if (
+      values.length < headers.length ||
+      !values[0].trim() ||
+      values.some(value => value.includes('全店托管'))
+    ) {
       continue;
     }
     
@@ -477,12 +487,6 @@ export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
         实际净投产比: toNumber(getValue(values, headers, '实际净投产比')),
         净成交笔数: parseInt(getValue(values, headers, '净成交笔数')) || 0,
         每笔净成交花费: toNumber(getValue(values, headers, '每笔净成交花费(元)')),
-        净交易额占比: getValue(values, headers, '净交易额占比'),
-        净成交笔数占比: getValue(values, headers, '净成交笔数占比'),
-        每笔净成交金额: toNumber(getValue(values, headers, '每笔净成交金额(元)')),
-        结算交易额: toNumber(getValue(values, headers, '结算交易额(元)')),
-        结算投产比: toNumber(getValue(values, headers, '结算投产比')),
-        结算成交笔数: parseInt(getValue(values, headers, '结算成交笔数')) || 0,
         退款豁免率: getValue(values, headers, '退款豁免率'),
         退单豁免率: getValue(values, headers, '退单豁免率'),
         净推广交易额: toNumber(getValue(values, headers, '净推广交易额(元)')),
@@ -539,6 +543,27 @@ function isRefundSuccessOrder(order: OrderData): boolean {
 }
 
 /**
+ * 判断订单是否已发货（有发货时间即表示已发货）
+ */
+function isShipped(order: OrderData): boolean {
+  return !!(order.发货时间 && order.发货时间.trim() !== '');
+}
+
+/**
+ * 判断是否为发货前退款（退款成功但未发货）
+ */
+function isRefundBeforeShip(order: OrderData): boolean {
+  return isRefundSuccessOrder(order) && !isShipped(order);
+}
+
+/**
+ * 判断是否为发货后退款（退款成功且已发货）
+ */
+function isRefundAfterShip(order: OrderData): boolean {
+  return isRefundSuccessOrder(order) && isShipped(order);
+}
+
+/**
  * 计算退款总览统计
  */
 export function calculateRefundOverview(orders: OrderData[]): RefundOverview {
@@ -560,6 +585,12 @@ export function calculateRefundOverview(orders: OrderData[]): RefundOverview {
   const stats = calculateRefundStats(orders);
   const highRefundSkuCount = stats.filter(s => s.退款率 > 20).length;
 
+  // 新增：区分发货前/后退款
+  const refundBeforeShipOrders = refundSuccessOrders.filter(isRefundBeforeShip);
+  const refundAfterShipOrders = refundSuccessOrders.filter(isRefundAfterShip);
+  const refundBeforeShipAmount = refundBeforeShipOrders.reduce((sum, o) => sum + o.商家实收金额, 0);
+  const refundAfterShipAmount = refundAfterShipOrders.reduce((sum, o) => sum + o.商家实收金额, 0);
+
   return {
     总订单数: totalOrders,
     退款订单数: refundOrders.length,
@@ -568,6 +599,10 @@ export function calculateRefundOverview(orders: OrderData[]): RefundOverview {
     退款成功总金额: Math.round(refundSuccessAmount * 100) / 100,
     退款损失占比: Math.round(lossRatio * 100) / 100,
     高退款率SKU数: highRefundSkuCount,
+    发货前退款订单数: refundBeforeShipOrders.length,
+    发货后退款订单数: refundAfterShipOrders.length,
+    发货前退款金额: Math.round(refundBeforeShipAmount * 100) / 100,
+    发货后退款金额: Math.round(refundAfterShipAmount * 100) / 100,
   };
 }
 
@@ -584,6 +619,10 @@ export function calculateRefundStats(orders: OrderData[]): RefundStat[] {
     退款成功订单数: number;
     退款成功额: number;
     销售额: number;
+    发货前退款订单数: number;
+    发货后退款订单数: number;
+    发货前退款金额: number;
+    发货后退款金额: number;
   }>();
 
   orders.forEach(order => {
@@ -597,6 +636,10 @@ export function calculateRefundStats(orders: OrderData[]): RefundStat[] {
       退款成功订单数: 0,
       退款成功额: 0,
       销售额: 0,
+      发货前退款订单数: 0,
+      发货后退款订单数: 0,
+      发货前退款金额: 0,
+      发货后退款金额: 0,
     };
 
     existing.总订单数 += 1;
@@ -604,6 +647,14 @@ export function calculateRefundStats(orders: OrderData[]): RefundStat[] {
     if (isRefundSuccessOrder(order)) {
       existing.退款成功订单数 += 1;
       existing.退款成功额 += order.商家实收金额;
+      // 区分发货前/后退款
+      if (isRefundBeforeShip(order)) {
+        existing.发货前退款订单数 += 1;
+        existing.发货前退款金额 += order.商家实收金额;
+      } else if (isRefundAfterShip(order)) {
+        existing.发货后退款订单数 += 1;
+        existing.发货后退款金额 += order.商家实收金额;
+      }
     } else {
       existing.销售额 += order.商家实收金额;
     }
@@ -627,6 +678,10 @@ export function calculateRefundStats(orders: OrderData[]): RefundStat[] {
       退款成功额: Math.round(data.退款成功额 * 100) / 100,
       销售额: Math.round(data.销售额 * 100) / 100,
       退款损失占比: Math.round(退款损失占比 * 100) / 100,
+      发货前退款订单数: data.发货前退款订单数,
+      发货后退款订单数: data.发货后退款订单数,
+      发货前退款金额: Math.round(data.发货前退款金额 * 100) / 100,
+      发货后退款金额: Math.round(data.发货后退款金额 * 100) / 100,
     });
   });
 
@@ -1026,4 +1081,318 @@ export function generateBudgetSuggestions(
   // 按净ROI升序（最差的在前）
   result.sort((a, b) => a.净ROI - b.净ROI);
   return result;
+}
+
+// ============ 一键 AI：价格 & 分析 ============
+
+/**
+ * AI 价格计算：根据输入的成本/快递/包装 + 目标利润率，反推每个 SKU 的建议定价
+ * 公式：建议售价 = (固定成本 + 退回运费损失) ÷ (1 - 平台扣点率 - 目标利润率)
+ * @param summaries 商品汇总（含发货后退款率）
+ * @param costConfig 当前成本配置（用于补齐人工/运营/优惠等已有项）
+ * @param input AI 价格输入参数
+ */
+export function calculateAIPricing(
+  summaries: ProductSummary[],
+  costConfig: DetailedCostConfig,
+  input: AIPriceInput
+): AIPriceResult[] {
+  const PLATFORM_RATE = 0.006;
+  const targetRate = input.目标利润率 / 100;
+  const denominator = 1 - PLATFORM_RATE - targetRate;
+
+  return summaries.map(s => {
+    const cfg: CostItem = costConfig[s.规格] || { 成本单价: 0 };
+    // 成本单价：优先用统一输入，否则沿用已有配置
+    const 成本单价 = input.成本单价 != null && input.成本单价 > 0
+      ? input.成本单价
+      : (cfg.成本单价 || 0);
+    // 快递费 / 包装耗材：优先用统一输入
+    const 快递费 = input.快递费 != null && input.快递费 > 0
+      ? input.快递费
+      : (cfg.启用快递费 ? (cfg.快递费 || 0) : 0);
+    const 包装耗材 = input.包装耗材 != null && input.包装耗材 > 0
+      ? input.包装耗材
+      : (cfg.启用包装耗材 ? (cfg.包装耗材 || 0) : 0);
+
+    const 人工成本 = cfg.人工成本 || 0;
+    const 运营成本 = cfg.运营成本 || 0;
+    const 商家承担优惠 = cfg.商家承担优惠 || 0;
+    const 运费险 = cfg.启用运费险 ? (cfg.运费险 || 0) : 0;
+
+    const 固定成本 = 成本单价 + 人工成本 + 运营成本 + 商家承担优惠 + 快递费 + 包装耗材 + 运费险;
+    const 退回运费损失 = 快递费 * ((s.发货后退款率 || 0) / 100);
+    const 原定价 = cfg.定价 || 0;
+
+    if (成本单价 <= 0) {
+      return {
+        规格: s.规格, 原定价, 建议定价: 0, 固定成本, 退回运费损失,
+        预估利润率: 0, skipped: true, reason: '缺少成本单价',
+      };
+    }
+    if (denominator <= 0) {
+      return {
+        规格: s.规格, 原定价, 建议定价: 0, 固定成本, 退回运费损失,
+        预估利润率: 0, skipped: true, reason: '目标利润率过高，无法计算',
+      };
+    }
+
+    const 建议定价 = Math.round(((固定成本 + 退回运费损失) / denominator) * 100) / 100;
+    const 平台费 = 建议定价 * PLATFORM_RATE;
+    const 净利润 = 建议定价 - 固定成本 - 平台费 - 退回运费损失;
+    const 预估利润率 = 建议定价 > 0 ? Math.round((净利润 / 建议定价) * 10000) / 100 : 0;
+
+    return {
+      规格: s.规格, 原定价, 建议定价, 固定成本, 退回运费损失, 预估利润率, skipped: false,
+    };
+  });
+}
+
+/**
+ * 生成套餐组合建议（基于捆绑销售论文模型）
+ * - 按商品ID分组，同商品多规格可组合
+ * - 折扣率随利润率递增：≥40% 让利 12%，20-40% 让利 8%，<20% 让利 4%
+ * - 套餐利润率需 ≥ 单卖加权平均利润率才推荐
+ * 参考：赵灯节等(2025)互补产品捆绑销售策略；Li & Chen(2019)；Harvard Nintendo 案例
+ */
+export function generateBundleSuggestions(
+  summaries: ProductSummary[],
+  costConfig: DetailedCostConfig
+): BundleSuggestion[] {
+  const groupByProduct = new Map<string, ProductSummary[]>();
+  summaries.forEach(s => {
+    if (!s.商品ID) return;
+    const arr = groupByProduct.get(s.商品ID) || [];
+    arr.push(s);
+    groupByProduct.set(s.商品ID, arr);
+  });
+
+  const results: BundleSuggestion[] = [];
+  groupByProduct.forEach((items, id) => {
+    const withPrice = items.filter(s => (costConfig[s.规格]?.定价 || 0) > 0);
+    if (withPrice.length < 2) return;
+
+    const sorted = [...withPrice].sort((a, b) => b.销量 - a.销量);
+    const combo = sorted.slice(0, Math.min(3, sorted.length));
+    if (combo.length < 2) return;
+
+    const 组合规格 = combo.map(s => s.规格);
+    const 单买总价 = combo.reduce((sum, s) => sum + (costConfig[s.规格]?.定价 || 0), 0);
+
+    const totalSales = combo.reduce((sum, s) => sum + s.销售额, 0);
+    const totalProfit = combo.reduce((sum, s) => sum + s.净利润, 0);
+    const weightedProfitRate = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+
+    let 折扣率: number;
+    if (weightedProfitRate >= 40) 折扣率 = 12;
+    else if (weightedProfitRate >= 20) 折扣率 = 8;
+    else 折扣率 = 4;
+
+    const 建议套餐价 = Math.round(单买总价 * (1 - 折扣率 / 100) * 100) / 100;
+
+    // 套餐成本 = 各规格单件成本之和
+    const 套餐成本 = combo.reduce((sum, s) => {
+      const c: CostItem = costConfig[s.规格] || { 成本单价: 0 };
+      const unitCost = (c.成本单价 || 0) + (c.人工成本 || 0) + (c.运营成本 || 0)
+        + (c.商家承担优惠 || 0)
+        + (c.启用快递费 ? (c.快递费 || 0) : 0)
+        + (c.启用包装耗材 ? (c.包装耗材 || 0) : 0)
+        + (c.启用运费险 ? (c.运费险 || 0) : 0);
+      return sum + unitCost;
+    }, 0);
+    const 套餐平台费 = 建议套餐价 * 0.006;
+    const 套餐利润 = 建议套餐价 - 套餐成本 - 套餐平台费;
+    const 预估套餐利润率 = 建议套餐价 > 0 ? Math.round((套餐利润 / 建议套餐价) * 10000) / 100 : 0;
+
+    // 仅推荐套餐利润率不低于加权平均利润率的组合
+    if (预估套餐利润率 < weightedProfitRate - 2) return;
+
+    results.push({
+      商品ID: id,
+      商品名称: combo[0].商品名称,
+      组合规格,
+      单买总价: Math.round(单买总价 * 100) / 100,
+      建议套餐价,
+      折扣率,
+      预估套餐利润率,
+      理由: `组合热销规格提升客单价；套餐较单买省 ${折扣率}%，预估利润率 ${预估套餐利润率}%`,
+    });
+  });
+
+  results.sort((a, b) => b.预估套餐利润率 - a.预估套餐利润率);
+  return results.slice(0, 8);
+}
+
+/**
+ * 生成 AI 分析报告：评估利润率/定价合理性，给出加价、加SKU、加套餐建议
+ * 参考：拼多多实战（健康利润率15%+/单品30-50%）；捆绑销售论文模型
+ */
+export function generateAIAnalysis(
+  summaries: ProductSummary[],
+  costConfig: DetailedCostConfig
+): AISuggestion[] {
+  const suggestions: AISuggestion[] = [];
+  const valid = summaries.filter(s => s.销售额 > 0 || (costConfig[s.规格]?.成本单价 || 0) > 0);
+
+  if (valid.length === 0) {
+    return [{
+      type: 'overall', level: 'info',
+      title: '暂无数据可分析',
+      detail: '请先导入销售数据或批量导入成本配置',
+      action: '使用批量导入或一键AI价格功能录入成本与定价',
+    }];
+  }
+
+  // 1. 整体利润率评估
+  const totalProfit = valid.reduce((sum, s) => sum + s.净利润, 0);
+  const totalSales = valid.reduce((sum, s) => sum + s.销售额, 0);
+  const overallRate = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+  const pricedSkus = valid.filter(s => (costConfig[s.规格]?.定价 || 0) > 0);
+
+  if (overallRate >= 15 && totalProfit > 0) {
+    suggestions.push({
+      type: 'overall', level: 'success',
+      title: '整体利润率健康',
+      detail: `整体利润率 ${overallRate.toFixed(2)}%，净利润 ${totalProfit.toFixed(2)} 元，超过 15% 健康线`,
+      action: '当前盈利良好，可加大爆品推广或测试新品拓展',
+      metric: `利润率 ${overallRate.toFixed(2)}%`,
+      reference: '拼多多实战：整体利润率 15%+ 为健康水位',
+    });
+  } else if (overallRate >= 0) {
+    suggestions.push({
+      type: 'overall', level: 'warning',
+      title: '整体利润率偏低',
+      detail: `整体利润率仅 ${overallRate.toFixed(2)}%，低于 15% 健康线`,
+      action: '优化供应链降本，或对低利润高销量SKU测试加价 1-3%',
+      metric: `利润率 ${overallRate.toFixed(2)}%`,
+      reference: '拼多多实战：整体利润率 15%+ 为健康水位',
+    });
+  } else {
+    suggestions.push({
+      type: 'overall', level: 'critical',
+      title: '整体处于亏损',
+      detail: `整体利润率 ${overallRate.toFixed(2)}%，净利润 ${totalProfit.toFixed(2)} 元`,
+      action: '立即核查成本录入，对亏损SKU加价 3-5% 或下架止亏',
+      metric: `利润率 ${overallRate.toFixed(2)}%`,
+    });
+  }
+
+  // 2. 加价建议
+  const avgVolume = valid.length > 0 ? valid.reduce((sum, s) => sum + s.销量, 0) / valid.length : 0;
+
+  const lossSkus = valid.filter(s => s.销售额 > 0 && s.净利润 < 0);
+  lossSkus.slice(0, 3).forEach(s => {
+    const cfg = costConfig[s.规格];
+    const price = cfg?.定价 || 0;
+    const add = price > 0 ? Math.ceil(price * 0.05 * 100) / 100 : 0;
+    suggestions.push({
+      type: 'pricing', level: 'critical',
+      title: `亏损SKU建议加价：${s.规格}`,
+      detail: `销售额 ${s.销售额}，净利润 ${s.净利润}，利润率 ${s.利润率}%`,
+      action: price > 0
+        ? `建议定价上调至 ¥${(price + add).toFixed(2)}（+${add.toFixed(2)}），或下架止亏`
+        : '未设置定价，请用AI价格功能补齐定价',
+      metric: `利润率 ${s.利润率}%`,
+    });
+  });
+
+  const lowProfitHighVol = valid.filter(s =>
+    s.销售额 > 0 && s.利润率 >= 0 && s.利润率 < 5 && s.销量 >= avgVolume
+  );
+  lowProfitHighVol.slice(0, 3).forEach(s => {
+    const cfg = costConfig[s.规格];
+    const price = cfg?.定价 || 0;
+    const add = price > 0 ? Math.ceil(price * 0.03 * 100) / 100 : 0;
+    suggestions.push({
+      type: 'pricing', level: 'warning',
+      title: `低利润高销量建议加价：${s.规格}`,
+      detail: `销量 ${s.销量}（高于均值 ${Math.round(avgVolume)}），但利润率仅 ${s.利润率}%`,
+      action: price > 0
+        ? `测试小幅加价至 ¥${(price + add).toFixed(2)}（+3%），观察销量敏感性`
+        : '请先设置定价',
+      metric: `利润率 ${s.利润率}%`,
+    });
+  });
+
+  const highProfitLowVol = valid.filter(s =>
+    s.销售额 > 0 && s.利润率 > 30 && s.销量 < avgVolume && s.销量 > 0
+  );
+  if (highProfitLowVol.length > 0) {
+    suggestions.push({
+      type: 'pricing', level: 'info',
+      title: `${highProfitLowVol.length} 个高利润低销量SKU`,
+      detail: `利润率>30%但销量低于均值，存在价格弹性空间`,
+      action: '可对部分SKU小幅降价（2-5%）测试销量提升，或增加规格覆盖更多价位段',
+      metric: `${highProfitLowVol.length} 个SKU`,
+    });
+  }
+
+  // 3. 加SKU建议（销量集中度）
+  const totalVolume = valid.reduce((sum, s) => sum + s.销量, 0);
+  if (totalVolume > 0) {
+    const sortedByVol = [...valid].sort((a, b) => b.销量 - a.销量);
+    const top1Rate = sortedByVol[0] ? (sortedByVol[0].销量 / totalVolume) * 100 : 0;
+    const top3Vol = sortedByVol.slice(0, 3).reduce((sum, s) => sum + s.销量, 0);
+    const top3Rate = (top3Vol / totalVolume) * 100;
+
+    if (top1Rate > 50) {
+      suggestions.push({
+        type: 'addSku', level: 'warning',
+        title: '销量过度集中于单一SKU',
+        detail: `Top1 SKU「${sortedByVol[0].规格}」占总销量 ${top1Rate.toFixed(1)}%，集中度过高`,
+        action: '围绕该爆款增加同款不同规格（颜色/尺寸/套餐），分散风险并覆盖更多人群',
+        metric: `Top1占比 ${top1Rate.toFixed(1)}%`,
+      });
+    } else if (top3Rate > 80 && valid.length < 8) {
+      suggestions.push({
+        type: 'addSku', level: 'info',
+        title: 'SKU数量偏少，建议拓展',
+        detail: `Top3 SKU占总销量 ${top3Rate.toFixed(1)}%，但总SKU仅 ${valid.length} 个`,
+        action: '增加新规格或互补品SKU，丰富价格带，提升客单价与覆盖面',
+        metric: `SKU数 ${valid.length}`,
+      });
+    }
+  }
+
+  // 4. 加套餐建议（捆绑销售论文模型）
+  const bundles = generateBundleSuggestions(valid, costConfig);
+  if (bundles.length > 0) {
+    const top = bundles[0];
+    suggestions.push({
+      type: 'bundle', level: 'success',
+      title: `建议新增套餐：${top.商品名称}`,
+      detail: `组合 ${top.组合规格.join(' + ')}，单买 ¥${top.单买总价}，套餐价 ¥${top.建议套餐价}（省 ${top.折扣率}%），预估利润率 ${top.预估套餐利润率}%`,
+      action: `采用混合捆绑（单品仍可单买），套餐较单买让利 ${top.折扣率}% 提升客单价`,
+      metric: `套餐利润率 ${top.预估套餐利润率}%`,
+      reference: '赵灯节等(2025)互补产品捆绑销售策略；Harvard Nintendo案例：混合捆绑优于纯捆绑',
+    });
+    if (bundles.length > 1) {
+      suggestions.push({
+        type: 'bundle', level: 'info',
+        title: `另有 ${bundles.length - 1} 个可选套餐组合`,
+        detail: bundles.slice(1, 4).map(b => `${b.商品名称}：¥${b.建议套餐价}（省${b.折扣率}%）`).join('；'),
+        action: '优先推广利润率最高的套餐，30-60天后评估效果',
+        reference: '捆绑策略：套餐利润率需 ≥ 单卖加权平均利润率',
+      });
+    }
+  } else if (pricedSkus.length >= 2) {
+    const multiSpecProducts = new Map<string, number>();
+    valid.forEach(s => {
+      if (s.商品ID) multiSpecProducts.set(s.商品ID, (multiSpecProducts.get(s.商品ID) || 0) + 1);
+    });
+    const hasMultiSpec = Array.from(multiSpecProducts.values()).some(c => c >= 2);
+    if (!hasMultiSpec) {
+      suggestions.push({
+        type: 'bundle', level: 'info',
+        title: '可考虑跨商品组合套餐',
+        detail: '当前各商品均为单规格，暂无同商品多规格可组合',
+        action: '为热销商品增加互补规格后即可生成套餐建议；或手动搭配互补品（主品+配件）做组合套餐',
+        reference: 'Li & Chen(2019)捆绑策略优于单独销售，产品互补性越高捆绑收益越大',
+      });
+    }
+  }
+
+  const levelOrder: Record<string, number> = { critical: 0, warning: 1, info: 2, success: 3 };
+  suggestions.sort((a, b) => levelOrder[a.level] - levelOrder[b.level]);
+  return suggestions;
 }

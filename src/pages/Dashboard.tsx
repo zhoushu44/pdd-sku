@@ -5,13 +5,13 @@ import CostInputPanel from '../components/CostInputPanel';
 import MarketingAnalysis from '../components/MarketingAnalysis';
 import RefundAnalysis from '../components/RefundAnalysis';
 import AdviceCenter from '../components/AdviceCenter';
-import { parseOrderData, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison } from '../utils/dataProcessor';
+import { parseOrderData, parseMarketingCSV, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison } from '../utils/dataProcessor';
 import { OrderData, DetailedCostConfig, MarketingDataRow, TimeRange } from '../types';
-import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, RefreshCcw, Lightbulb } from 'lucide-react';
+import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, RefreshCcw, Lightbulb, CircleHelp } from 'lucide-react';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<OrderData[]>([]);
-  const [marketingData] = useState<MarketingDataRow[]>([]);
+  const [marketingData, setMarketingData] = useState<MarketingDataRow[]>([]);
   const [costConfig, setCostConfig] = useState<DetailedCostConfig>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice'>('overview');
@@ -95,6 +95,38 @@ export default function Dashboard() {
       console.error('加载销售数据失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 处理推广数据文件上传
+  const handleMarketingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let csvText: string;
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!worksheet) throw new Error('工作簿不包含可读取的工作表');
+        csvText = XLSX.utils.sheet_to_csv(worksheet);
+      } else {
+        csvText = await file.text();
+      }
+
+      const parsedMarketing = parseMarketingCSV(csvText);
+      if (parsedMarketing.length === 0) {
+        alert('文件解析失败，请检查推广数据表头和格式');
+        return;
+      }
+      setMarketingData(parsedMarketing);
+      setActiveTab('marketing');
+    } catch (error) {
+      console.error('解析推广数据失败:', error);
+      alert('文件解析失败，请检查推广数据格式');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -196,6 +228,20 @@ export default function Dashboard() {
                   accept=".csv,.txt"
                   className="hidden"
                   onChange={handleSalesFileUpload}
+                />
+              </label>
+
+              <label
+                title="推广数据表下载：拼多多推广后台 → 报表/数据 → 导出报表（支持 Excel/CSV）"
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <CircleHelp className="w-4 h-4" />
+                推广数据
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.txt"
+                  className="hidden"
+                  onChange={handleMarketingFileUpload}
                 />
               </label>
 

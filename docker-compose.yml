@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  pdd-sku-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pdd-sku-manager
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - pdd-network
+
+networks:
+  pdd-network:
+    driver: bridge
