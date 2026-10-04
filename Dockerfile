@@ -18,6 +18,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# 数据持久化目录（宿主机 ./data 挂载点）
+RUN mkdir -p /data && chown -R nginx:nginx /data && chmod -R 755 /data
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

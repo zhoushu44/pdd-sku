@@ -214,36 +214,36 @@ const AIPanel: React.FC<Props> = ({ allSummaries, costConfig, onClose, onApply }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
-      <div className="w-full max-w-5xl max-h-[92vh] bg-slate-900 border border-slate-700 rounded-xl overflow-hidden flex flex-col">
-        <header className="p-4 border-b border-slate-700 flex justify-between items-center">
+      <div className="w-full max-w-5xl max-h-[92vh] bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+        <header className="p-4 border-b border-slate-300 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Sparkles className="text-purple-400" />
+            <Sparkles className="text-purple-600" />
             <div>
-              <h3 className="text-white font-bold">一键 AI SKU 工作台</h3>
-              <p className="text-xs text-slate-400">输入商品描述，AI 自动生成完整方案</p>
+              <h3 className="text-slate-900 font-bold">一键 AI SKU 工作台</h3>
+              <p className="text-[13px] text-slate-500">输入商品描述，AI 自动生成完整方案</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-300 hover:bg-slate-800 rounded" title="模型设置">
+            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="模型设置">
               <Settings className="w-4 h-4" />
             </button>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-800 rounded">
+            <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
               <X className="w-5 h-5" />
             </button>
           </div>
         </header>
-        <nav className="flex border-b border-slate-700">
-          <button onClick={() => setTab('price')} className={`px-5 py-3 text-sm ${tab === 'price' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400'}`}>AI 价格</button>
-          <button onClick={() => setTab('analysis')} className={`px-5 py-3 text-sm ${tab === 'analysis' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-slate-400'}`}>AI 分析</button>
+        <nav className="flex border-b border-slate-300">
+          <button onClick={() => setTab('price')} className={`px-4 py-2 text-[13px] ${tab === 'price' ? 'text-purple-600 border-b-2 border-purple-400' : 'text-slate-500'}`}>AI 价格</button>
+          <button onClick={() => setTab('analysis')} className={`px-4 py-2 text-[13px] ${tab === 'analysis' ? 'text-amber-600 border-b-2 border-amber-400' : 'text-slate-500'}`}>AI 分析</button>
         </nav>
         <main className="p-5 overflow-y-auto space-y-4">
           <div className="space-y-2">
-            <label className="text-sm text-slate-300 font-medium">商品描述 <span className="text-slate-500">（必填）</span></label>
-            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder={placeholder} rows={6} className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 text-sm" />
+            <label className="text-[13px] text-slate-600 font-medium">商品描述 <span className="text-slate-400">（必填）</span></label>
+            <textarea value={textInput} onChange={e => setTextInput(e.target.value)} placeholder={placeholder} rows={6} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-[13px]" />
           </div>
           {tab === 'analysis' && (
             <div className="space-y-2">
-              <label className="text-sm text-slate-300 font-medium">同行参考数据 <span className="text-slate-500">（可选，可粘贴竞品 SKU 表格）</span></label>
+              <label className="text-[13px] text-slate-600 font-medium">同行参考数据 <span className="text-slate-400">（可选，可粘贴竞品 SKU 表格）</span></label>
               <textarea value={reference} onChange={e => setReference(e.target.value)} placeholder="【同行参考数据 - 可选】
 
 格式 1（简单列表）：
@@ -257,57 +257,57 @@ A 店	8.9	23	42	包邮
 B 店	9.9	26	48	送杯刷
 C 店	7.9	25	85	限时特价
 
-💡 提示：同行数据可以帮助 AI 生成更有竞争力的定价方案" rows={4} className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm" />
+💡 提示：同行数据可以帮助 AI 生成更有竞争力的定价方案" rows={4} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-[13px]" />
             </div>
           )}
           <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-400">当前全部 SKU：{allSummaries.length} 个{model.apiKey ? ` · 模型：${model.model}` : ' · 未配置模型'}</div>
-            <button onClick={() => generate(tab)} disabled={loading || !textInput.trim()} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 text-white rounded text-sm">
+            <div className="text-[13px] text-slate-500">当前全部 SKU：{allSummaries.length} 个{model.apiKey ? ` · 模型：${model.model}` : ' · 未配置模型'}</div>
+            <button onClick={() => generate(tab)} disabled={loading || !textInput.trim()} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg text-[13px]">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}生成全部 SKU
             </button>
           </div>
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-sm rounded flex gap-2">
+            <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg flex gap-2">
               <AlertCircle className="w-4 h-4" />{error}
             </div>
           )}
           {message && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm rounded flex gap-2">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[13px] rounded-lg flex gap-2">
               <CheckCircle2 className="w-4 h-4" />{message}
             </div>
           )}
           {rows.length > 0 && (
-            <div className="border border-slate-700 rounded-lg overflow-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-800 text-slate-400">
+            <div className="border border-slate-200 rounded-lg overflow-auto">
+              <table className="w-full text-[13px]">
+                <thead className="bg-slate-100 text-[13px] font-medium text-slate-500">
                   <tr>
-                    <th className="p-2">应用</th>
-                    <th className="p-2 text-left">SKU</th>
-                    <th className="p-2">类型</th>
-                    <th className="p-2">成本</th>
-                    <th className="p-2">运费</th>
-                    <th className="p-2">人工</th>
-                    <th className="p-2">定价</th>
-                    <th className="p-2">利润率</th>
-                    <th className="p-2 text-left">理由</th>
+                    <th className="px-3 py-2.5">应用</th>
+                    <th className="px-3 py-2.5 text-left">SKU</th>
+                    <th className="px-3 py-2.5">类型</th>
+                    <th className="px-3 py-2.5">成本</th>
+                    <th className="px-3 py-2.5">运费</th>
+                    <th className="px-3 py-2.5">人工</th>
+                    <th className="px-3 py-2.5">定价</th>
+                    <th className="px-3 py-2.5">利润率</th>
+                    <th className="px-3 py-2.5 text-left">理由</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {rows.map((r, i) => (
-                    <tr key={r.id} className="border-t border-slate-700/50">
+                    <tr key={r.id} className="hover:bg-slate-50">
                       <td className="p-2 text-center">
                         <input type="checkbox" checked={r.selected} onChange={e => setRows(prev => prev.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))} />
                       </td>
                       <td className="p-2 min-w-48">
-                        <input value={r['规格']} onChange={e => setRows(prev => prev.map((x, j) => j === i ? { ...x, '规格': e.target.value } : x))} className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white" />
+                        <input value={r['规格']} onChange={e => setRows(prev => prev.map((x, j) => j === i ? { ...x, '规格': e.target.value } : x))} className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                       </td>
-                      <td className="p-2 text-center text-amber-300">{r['类型']}</td>
+                      <td className="p-2 text-center text-amber-600">{r['类型']}</td>
                       {(['成本单价', '快递费', '人工成本', '定价', '利润率'] as const).map(k => (
                         <td key={k} className="p-2">
-                          <input type="number" value={r[k as keyof GeneratedAISKU] as number} onChange={e => setRows(prev => prev.map((x, j) => j === i ? { ...x, [k]: number(e.target.value) } : x))} className="w-20 bg-slate-800 border border-slate-700 rounded px-1 py-1 text-right text-white" />
+                          <input type="number" value={r[k as keyof GeneratedAISKU] as number} onChange={e => setRows(prev => prev.map((x, j) => j === i ? { ...x, [k]: number(e.target.value) } : x))} className="w-20 bg-white border border-slate-300 rounded-md px-1 py-1 text-right text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                         </td>
                       ))}
-                      <td className="p-2 text-slate-400 min-w-64">{r['建议理由']}</td>
+                      <td className="p-2 text-slate-500 min-w-64">{r['建议理由']}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -315,34 +315,34 @@ C 店	7.9	25	85	限时特价
             </div>
           )}
         </main>
-        <footer className="p-3 border-t border-slate-700 flex justify-between items-center">
-          <span className="text-xs text-slate-500">
+        <footer className="p-3 border-t border-slate-300 flex justify-between items-center">
+          <span className="text-[13px] text-slate-400">
             <Info className="inline w-3 h-3 mr-1" />请检查生成结果后再应用
           </span>
-          <button onClick={apply} disabled={!rows.some(r => r.selected)} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 text-white rounded text-sm flex items-center gap-2">
+          <button onClick={apply} disabled={!rows.some(r => r.selected)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg text-[13px] flex items-center gap-2">
             <Check className="w-4 h-4" />应用选中 SKU 并保存
           </button>
         </footer>
         {showSettings && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center">
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 w-full max-w-md space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-md space-y-4">
               <div className="flex justify-between">
-                <h3 className="text-white font-bold">OpenAI 兼容模型设置</h3>
+                <h3 className="text-slate-900 font-bold">OpenAI 兼容模型设置</h3>
                 <button onClick={() => setShowSettings(false)}>
-                  <X className="text-slate-400 w-5 h-5" />
+                  <X className="text-slate-500 w-5 h-5" />
                 </button>
               </div>
-              <label className="block text-sm text-slate-300">
+              <label className="block text-[13px] text-slate-600">
                 API 地址
-                <input value={model.apiUrl} onChange={e => setModel({ ...model, apiUrl: e.target.value })} className="mt-1 w-full p-2 bg-slate-800 border border-slate-600 rounded text-white" placeholder="https://api.openai.com/v1" />
+                <input value={model.apiUrl} onChange={e => setModel({ ...model, apiUrl: e.target.value })} className="mt-1 w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" placeholder="https://api.openai.com/v1" />
               </label>
-              <label className="block text-sm text-slate-300">
+              <label className="block text-[13px] text-slate-600">
                 API Key
-                <input type="password" value={model.apiKey} onChange={e => setModel({ ...model, apiKey: e.target.value })} className="mt-1 w-full p-2 bg-slate-800 border border-slate-600 rounded text-white" />
+                <input type="password" value={model.apiKey} onChange={e => setModel({ ...model, apiKey: e.target.value })} className="mt-1 w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </label>
-              <label className="block text-sm text-slate-300">
+              <label className="block text-[13px] text-slate-600">
                 模型名称
-                <input value={model.model} onChange={e => setModel({ ...model, model: e.target.value })} className="mt-1 w-full p-2 bg-slate-800 border border-slate-600 rounded text-white" />
+                <input value={model.model} onChange={e => setModel({ ...model, model: e.target.value })} className="mt-1 w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </label>
               <button onClick={async () => {
                 setError('');
@@ -353,8 +353,8 @@ C 店	7.9	25	85	限时特价
                 } catch (e) {
                   setError(e instanceof Error ? e.message : '连接失败');
                 }
-              }} className="w-full py-2 bg-blue-600 text-white rounded">测试连接</button>
-              <button onClick={saveSettings} className="w-full py-2 bg-emerald-600 text-white rounded">保存设置</button>
+              }} className="w-full px-4 py-2 text-[13px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg">测试连接</button>
+              <button onClick={saveSettings} className="w-full px-4 py-2 text-[13px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">保存设置</button>
             </div>
           </div>
         )}

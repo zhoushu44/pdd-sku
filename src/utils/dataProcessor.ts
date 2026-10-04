@@ -1,4 +1,4 @@
-import { OrderData, ProductSummary, DetailedCostConfig, CostItem, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion, AISuggestion, AIPriceInput, AIPriceResult, BundleSuggestion } from '../types';
+import { OrderData, ProductSummary, DetailedCostConfig, CostItem, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion, AISuggestion, AIPriceInput, AIPriceResult, BundleSuggestion, SkuDetailRow, SkuDetailOverview, SkuVerdict, SkuDetailDimension } from '../types';
 
 /**
  * 解析日期字符串为本地时间 Date 对象，避免时区偏差
@@ -197,6 +197,49 @@ export function parseOrderData(csvText: string): OrderData[] {
 }
 
 /**
+ * 订单去重：按「订单号 + 商品规格」为唯一键（同一订单可含多个规格行，分别保留）
+ * 后出现的记录覆盖先出现的（同一键时取最新）
+ */
+export function dedupeOrders(orders: OrderData[]): OrderData[] {
+  const map = new Map<string, OrderData>();
+  for (const order of orders) {
+    map.set(`${order.订单号}|${order.商品规格}`, order);
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * 合并订单：已有数据 + 新上传数据，去重后返回合并结果与统计
+ * （用于多文件、多日期段、多店铺表格的累计导入；重复行以最新上传为准）
+ */
+export function mergeOrders(existing: OrderData[], incoming: OrderData[]): { merged: OrderData[]; added: number; duplicates: number } {
+  const merged = dedupeOrders([...existing, ...incoming]);
+  const added = merged.length - existing.length;
+  return { merged, added, duplicates: incoming.length - added };
+}
+
+/**
+ * 营销数据去重：按「日期 + 商品ID + 推广名称 + 推广场景」为唯一键
+ * （同一商品在多个推广计划/场景下各有一行，需全部保留）
+ */
+export function dedupeMarketingData(rows: MarketingDataRow[]): MarketingDataRow[] {
+  const map = new Map<string, MarketingDataRow>();
+  for (const row of rows) {
+    map.set(`${row.日期}|${row.商品ID}|${row.推广名称}|${row.推广场景}`, row);
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * 合并营销数据：已有数据 + 新上传数据，去重后返回合并结果与统计
+ */
+export function mergeMarketingRows(existing: MarketingDataRow[], incoming: MarketingDataRow[]): { merged: MarketingDataRow[]; added: number; duplicates: number } {
+  const merged = dedupeMarketingData([...existing, ...incoming]);
+  const added = merged.length - existing.length;
+  return { merged, added, duplicates: incoming.length - added };
+}
+
+/**
  * 按商品规格分组统计
  * @param orders 订单数据数组
  * @returns 按规格分组的产品汇总数组
@@ -274,6 +317,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
       快递费: 0,
       包装耗材: 0,
       运费险: 0,
+      退款金额: Math.round(data.退款成功额 * 100) / 100,
       退款率: 0,
       真实退款率: Math.round(真实退款率 * 100) / 100,
       发货后退款率: Math.round(发货后退款率 * 100) / 100,
@@ -291,6 +335,57 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
   summaries.sort((a, b) => b.销售额 - a.销售额);
 
   return summaries;
+}
+
+/**
+ * 将 SKU（规格）维度汇总聚合为单品（商品ID）维度汇总
+ * 输入应为已应用成本配置的 SKU 汇总（calculateProfit 之后），各项成本/利润为总额可直接相加
+ * 注意：营销花费为商品级数值（同商品各SKU相同），聚合时只取一次，不累加
+ * @param skuSummaries SKU 维度汇总数组
+ * @returns 单品维度汇总数组（按销售额降序），规格字段填商品名称作为展示名
+ */
+export function groupByProduct(skuSummaries: ProductSummary[]): ProductSummary[] {
+  const map = new Map<string, ProductSummary>();
+
+  skuSummaries.forEach(s => {
+    const key = s.商品ID || s.商品名称 || s.规格;
+    const existing = map.get(key);
+    if (!existing) {
+      // 首个 SKU：以它为模板（营销花费等商品级字段直接带入），展示名用商品名称
+      map.set(key, {
+        ...s,
+        规格: s.商品名称 || s.商品ID || s.规格,
+        SKU净利润: 0,
+      });
+      return;
+    }
+    // 累加可加字段（均为总额）
+    existing.销售额 += s.销售额;
+    existing.销量 += s.销量;
+    existing.订单数 += s.订单数;
+    existing.总商品成本 += s.总商品成本;
+    existing.人工成本 += s.人工成本;
+    existing.运营成本 += s.运营成本;
+    existing.平台技术服务费 += s.平台技术服务费;
+    existing.商家承担优惠 += s.商家承担优惠;
+    existing.快递费 += s.快递费;
+    existing.包装耗材 += s.包装耗材;
+    existing.运费险 += s.运费险;
+    existing.退款金额 += s.退款金额;
+    existing.总成本 += s.总成本;
+    existing.预估退款损失 += s.预估退款损失;
+    existing.净利润 += s.净利润;
+  });
+
+  const result = Array.from(map.values());
+  result.forEach(p => {
+    p.平均客单价 = p.订单数 > 0 ? Math.round((p.销售额 / p.订单数) * 100) / 100 : 0;
+    p.利润率 = p.销售额 > 0 ? Math.round((p.净利润 / p.销售额) * 100 * 100) / 100 : 0;
+    const totalAmount = p.销售额 + p.退款金额;
+    p.真实退款率 = totalAmount > 0 ? Math.round((p.退款金额 / totalAmount) * 100 * 100) / 100 : 0;
+  });
+  result.sort((a, b) => b.销售额 - a.销售额);
+  return result;
 }
 
 /**
@@ -780,11 +875,60 @@ function compareMetric(current: number, previous: number): MetricComparison {
 }
 
 /**
+ * 按日期范围筛选营销数据
+ */
+function filterMarketingByBounds(
+  marketingData: MarketingDataRow[],
+  start: Date,
+  end: Date
+): MarketingDataRow[] {
+  return marketingData.filter(row => {
+    if (!row.日期) return false;
+    const date = parseLocalDate(row.日期);
+    if (isNaN(date.getTime())) return false;
+    return date >= start && date <= end;
+  });
+}
+
+/**
+ * 计算周期整体利润率（%）：净利润合计 / 销售额合计
+ * 与主流程口径一致：按规格分组 → 合并营销 → 应用成本配置
+ */
+function calculatePeriodProfitRate(
+  orders: OrderData[],
+  costConfig: DetailedCostConfig,
+  marketingData: MarketingDataRow[]
+): number {
+  const grouped = groupBySpec(orders);
+  const withMarketing = mergeMarketingData(grouped, marketingData);
+  const withProfit = withMarketing.map(item => calculateProfit(item, costConfig));
+  const totalSales = withProfit.reduce((sum, s) => sum + s.销售额, 0);
+  const totalProfit = withProfit.reduce((sum, s) => sum + s.净利润, 0);
+  return totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+}
+
+/**
+ * 计算周期推广ROI：营销交易额合计 / 营销花费合计
+ */
+function calculatePeriodROI(marketingData: MarketingDataRow[]): number {
+  const spend = marketingData.reduce((sum, r) => sum + (r.总营销花费 || 0), 0);
+  const gmv = marketingData.reduce((sum, r) => sum + (r.交易额 || 0), 0);
+  return spend > 0 ? gmv / spend : 0;
+}
+
+/**
  * 计算环比对比（当前周期 vs 上一周期）
  * @param orders 全部订单数据（未按时间筛选）
  * @param range 当前时间范围
+ * @param costConfig 成本配置（用于计算利润率环比，缺省为空配置）
+ * @param marketingData 营销数据（用于计算推广ROI环比，缺省为空）
  */
-export function calculatePeriodComparison(orders: OrderData[], range: TimeRange): PeriodComparison | null {
+export function calculatePeriodComparison(
+  orders: OrderData[],
+  range: TimeRange,
+  costConfig: DetailedCostConfig = {},
+  marketingData: MarketingDataRow[] = []
+): PeriodComparison | null {
   if (range === 'all') return null;
 
   const currentBounds = getTimeRangeBounds(range);
@@ -796,13 +940,235 @@ export function calculatePeriodComparison(orders: OrderData[], range: TimeRange)
   const currentMetrics = calculateOrdersMetrics(currentOrders);
   const previousMetrics = calculateOrdersMetrics(previousOrders);
 
+  const currentMarketing = filterMarketingByBounds(marketingData, currentBounds.start, currentBounds.end);
+  const previousMarketing = filterMarketingByBounds(marketingData, previousBounds.start, previousBounds.end);
+
+  const currentProfitRate = calculatePeriodProfitRate(currentOrders, costConfig, currentMarketing);
+  const previousProfitRate = calculatePeriodProfitRate(previousOrders, costConfig, previousMarketing);
+
+  const currentROI = calculatePeriodROI(currentMarketing);
+  const previousROI = calculatePeriodROI(previousMarketing);
+
   return {
     销售额: compareMetric(currentMetrics.销售额, previousMetrics.销售额),
     销量: compareMetric(currentMetrics.销量, previousMetrics.销量),
     订单数: compareMetric(currentMetrics.订单数, previousMetrics.订单数),
     商家实收: compareMetric(currentMetrics.商家实收, previousMetrics.商家实收),
     平均客单价: compareMetric(currentMetrics.平均客单价, previousMetrics.平均客单价),
+    利润率: compareMetric(
+      Math.round(currentProfitRate * 100) / 100,
+      Math.round(previousProfitRate * 100) / 100
+    ),
+    推广ROI: compareMetric(
+      Math.round(currentROI * 100) / 100,
+      Math.round(previousROI * 100) / 100
+    ),
   };
+}
+
+// ============ 科学分析统计工具 ============
+
+/**
+ * 中位数（抗异常值，优于均值用于长尾分布的分界）
+ */
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/**
+ * 分位数（线性插值，q ∈ [0,1]）
+ */
+export function quantile(values: number[], q: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return base + 1 < sorted.length
+    ? sorted[base] + rest * (sorted[base + 1] - sorted[base])
+    : sorted[base];
+}
+
+/**
+ * 变异系数 CV = 标准差 / 均值（衡量波动稳定性，样本<2 或均值≤0 时返回 0）
+ */
+export function coefficientOfVariation(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (mean <= 0) return 0;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance) / mean;
+}
+
+/**
+ * 赫芬达尔指数 HHI = Σ(份额)²，份额以百分比计（范围 0-10000），越高越集中
+ */
+export function computeHHI(values: number[]): number {
+  const total = values.reduce((s, v) => s + v, 0);
+  if (total <= 0) return 0;
+  return values.reduce((s, v) => s + ((v / total) * 100) ** 2, 0);
+}
+
+/**
+ * 集中度 CRn：前 n 项占总额的比例（%）
+ */
+export function computeCR(values: number[], n: number): number {
+  const total = values.reduce((s, v) => s + v, 0);
+  if (total <= 0) return 0;
+  const top = [...values].sort((a, b) => b - a).slice(0, n).reduce((s, v) => s + v, 0);
+  return (top / total) * 100;
+}
+
+export interface TrendAnalysis {
+  n: number;              // 样本量
+  slope: number;          // 原始斜率（单位/期）
+  normalizedSlope: number;// 归一化斜率（斜率 / 均值），即每期相对变化
+  r2: number;             // 拟合优度 R²（0-1）
+  isDeclining: boolean;   // 综合判定：归一化斜率显著为负且拟合可信
+}
+
+/**
+ * 线性回归趋势分析：归一化斜率 + R² + 最小样本量
+ * 判定衰退需同时满足：样本量 ≥ minSamples、每期相对降幅 ≤ -2%、R² ≥ 0.3
+ */
+export function analyzeTrend(values: number[], minSamples = 5): TrendAnalysis {
+  const n = values.length;
+  const empty: TrendAnalysis = { n, slope: 0, normalizedSlope: 0, r2: 0, isDeclining: false };
+  if (n < minSamples) return empty;
+
+  const meanX = (n - 1) / 2;
+  const meanY = values.reduce((s, v) => s + v, 0) / n;
+  if (meanY <= 0) return empty;
+
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = i - meanX;
+    const dy = values[i] - meanY;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+  const slope = sxx === 0 ? 0 : sxy / sxx;
+  const r2 = sxx > 0 && syy > 0 ? (sxy * sxy) / (sxx * syy) : 0;
+  const normalizedSlope = slope / meanY;
+  return {
+    n,
+    slope,
+    normalizedSlope,
+    r2,
+    isDeclining: normalizedSlope <= -0.02 && r2 >= 0.3,
+  };
+}
+
+// ============ 异常检测 / 预测 ============
+
+export interface AnomalyResult {
+  index: number;   // 在原始序列中的下标
+  value: number;   // 原始值
+  type: 'high' | 'low';
+  zScore: number;  // 标准化偏离度（用于强度展示）
+}
+
+/**
+ * 四分位距（IQR）异常检测
+ * 上下界 = Q1/Q3 ∓ iqrFactor × IQR，超出即判为异常
+ * @param values 数值序列（保持原始顺序）
+ * @param iqrFactor 倍数，默认 1.5（标准箱线图口径，1.5 为温和异常，3 为极端异常）
+ */
+export function detectAnomalies(values: number[], iqrFactor = 1.5): AnomalyResult[] {
+  if (values.length < 4) return [];
+  const sorted = [...values].sort((a, b) => a - b);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1;
+  if (iqr <= 0) return [];
+  const lower = q1 - iqrFactor * iqr;
+  const upper = q3 + iqrFactor * iqr;
+
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  const std = Math.sqrt(variance);
+
+  const result: AnomalyResult[] = [];
+  values.forEach((v, i) => {
+    if (v > upper || v < lower) {
+      result.push({
+        index: i,
+        value: v,
+        type: v > upper ? 'high' : 'low',
+        zScore: std > 0 ? (v - mean) / std : 0,
+      });
+    }
+  });
+  return result;
+}
+
+/**
+ * 简单移动平均（SMA）
+ * 前 window-1 项无足够数据，返回 null
+ */
+export function movingAverage(values: number[], window: number): (number | null)[] {
+  if (window < 1) return values.map(() => null);
+  return values.map((_, i) => {
+    if (i < window - 1) return null;
+    let sum = 0;
+    for (let j = i - window + 1; j <= i; j++) sum += values[j];
+    return Math.round((sum / window) * 100) / 100;
+  });
+}
+
+export interface ForecastPoint {
+  step: number;    // 距最后一期的步数（1,2,3...）
+  value: number;   // 预测值
+  lower: number;   // 95% 预测区间下界
+  upper: number;   // 95% 预测区间上界
+}
+
+/**
+ * 基于最小二乘线性外推预测未来 periods 期
+ * 用残差标准差估算 95% 预测区间（±1.96σ），负值截断为 0
+ */
+export function forecastLinear(values: number[], periods: number): ForecastPoint[] {
+  const n = values.length;
+  if (n < 3 || periods < 1) return [];
+  const meanX = (n - 1) / 2;
+  const meanY = values.reduce((sum, v) => sum + v, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (i - meanX) * (values[i] - meanY);
+    sxx += (i - meanX) ** 2;
+  }
+  const slope = sxx === 0 ? 0 : sxy / sxx;
+  const intercept = meanY - slope * meanX;
+
+  // 残差标准差
+  let ssRes = 0;
+  for (let i = 0; i < n; i++) {
+    const pred = slope * i + intercept;
+    ssRes += (values[i] - pred) ** 2;
+  }
+  const residualStd = n > 2 ? Math.sqrt(ssRes / (n - 2)) : 0;
+  const margin = 1.96 * residualStd;
+
+  const result: ForecastPoint[] = [];
+  for (let k = 1; k <= periods; k++) {
+    const x = n - 1 + k;
+    const value = slope * x + intercept;
+    result.push({
+      step: k,
+      value: Math.round(Math.max(0, value) * 100) / 100,
+      lower: Math.round(Math.max(0, value - margin) * 100) / 100,
+      upper: Math.round(Math.max(0, value + margin) * 100) / 100,
+    });
+  }
+  return result;
 }
 
 // ============ 智能运营建议 ============
@@ -1396,3 +1762,177 @@ export function generateAIAnalysis(
   suggestions.sort((a, b) => levelOrder[a.level] - levelOrder[b.level]);
   return suggestions;
 }
+
+// ============ 单品明细（推广决策） ============
+
+/** 平台扣点率（与利润计算保持一致） */
+const PLATFORM_FEE_RATE = 0.006;
+
+/**
+ * 计算单品明细：每个款（规格）或每个单品（商品ID）的退款、推广分摊、毛利、利润与实际ROI，并给出推广判定
+ *
+ * 口径：
+ * - 净销售额 = 销售额 - 退款金额
+ * - 订单退款率 = 退款金额 ÷ 销售额 × 100
+ * - 分摊推广费 = 该商品ID推广花费按销售额占比分摊（按商品维度时即该商品ID全部推广花费）
+ * - 净推广占比 = 分摊推广费 ÷ 净销售额 × 100
+ * - 单品毛利 = 净销售额 - 商品成本（成本单价 × 未退款件数）
+ * - 单品利润 = 单品毛利 - 快递 - 运费险 - 扣点 - 分摊推广费 - 该款补偿
+ * - 实际毛利率 = 单品毛利 ÷ 净销售额 × 100
+ * - 实际ROI = 净销售额 ÷ 分摊推广费
+ * - 实际保ROI = 净销售额 ÷ (单品利润 + 分摊推广费)
+ * - 判定：实际ROI 低于保本线 → 停推广；保本线到 1.2 倍 → 降预算；1.2 倍以上 → 可放大
+ *
+ * @param summaries 商品汇总（含销售额/退款金额/销量/订单数）
+ * @param marketingData 营销数据（按商品ID汇总推广花费）
+ * @param costConfig 成本配置（成本单价/快递费/运费险/补偿）
+ * @param orders 订单数据（仅用于推导统计期，可省略）
+ * @param dimension 维度：sku=按规格明细，product=按商品ID汇总
+ */
+export function calculateSkuDetail(
+  summaries: ProductSummary[],
+  marketingData: MarketingDataRow[],
+  costConfig: DetailedCostConfig,
+  orders: OrderData[] = [],
+  dimension: SkuDetailDimension = 'sku'
+): { rows: SkuDetailRow[]; overview: SkuDetailOverview } {
+  // 按商品ID汇总推广花费
+  const spendByProduct = new Map<string, number>();
+  marketingData.forEach(row => {
+    if (!row.商品ID) return;
+    spendByProduct.set(row.商品ID, (spendByProduct.get(row.商品ID) || 0) + (row.总营销花费 || 0));
+  });
+
+  // 商品ID下销售额合计（用于按销售额分摊推广费）
+  const salesByProduct = new Map<string, number>();
+  summaries.forEach(s => {
+    if (!s.商品ID) return;
+    salesByProduct.set(s.商品ID, (salesByProduct.get(s.商品ID) || 0) + s.销售额);
+  });
+
+  // 按维度聚合
+  interface Bucket {
+    款号: string;
+    商品ID: string;
+    销售额: number;
+    退款金额: number;
+    订单数: number;
+    商品成本: number;
+    快递费: number;
+    运费险: number;
+    补偿: number;
+  }
+
+  const buckets = new Map<string, Bucket>();
+  summaries.forEach(s => {
+    const isSku = dimension === 'sku';
+    const key = isSku ? `sku:${s.规格}` : `product:${s.商品ID || s.商品名称 || s.规格}`;
+    const cfg: CostItem = costConfig[s.规格] || { 成本单价: 0 };
+    const 件数 = s.销量 || 0;
+
+    const bucket = buckets.get(key) || {
+      款号: isSku ? s.规格 : (s.商品名称 || s.商品ID || '未知商品'),
+      商品ID: s.商品ID,
+      销售额: 0,
+      退款金额: 0,
+      订单数: 0,
+      商品成本: 0,
+      快递费: 0,
+      运费险: 0,
+      补偿: 0,
+    };
+
+    bucket.销售额 += s.销售额 || 0;
+    bucket.退款金额 += s.退款金额 || 0;
+    bucket.订单数 += s.订单数 || 0;
+    bucket.商品成本 += (cfg.成本单价 || 0) * 件数;
+    bucket.快递费 += (cfg.启用快递费 ? (cfg.快递费 || 0) : 0) * 件数;
+    bucket.运费险 += (cfg.启用运费险 ? (cfg.运费险 || 0) : 0) * 件数;
+    bucket.补偿 += cfg.补偿 || 0;
+
+    buckets.set(key, bucket);
+  });
+
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
+  const rows: SkuDetailRow[] = [];
+  buckets.forEach(bucket => {
+    const 销售额 = bucket.销售额;
+    const 退款金额 = bucket.退款金额;
+    const 净销售额 = 销售额 - 退款金额;
+    const 订单数 = bucket.订单数;
+    const 客单价 = 订单数 > 0 ? 销售额 / 订单数 : 0;
+    const 订单退款率 = 销售额 > 0 ? (退款金额 / 销售额) * 100 : 0;
+
+    const productSpend = spendByProduct.get(bucket.商品ID) || 0;
+    const productSales = salesByProduct.get(bucket.商品ID) || 0;
+    const 推广费 = productSales > 0 ? productSpend * (销售额 / productSales) : 0;
+    const 净推广占比 = 净销售额 > 0 ? (推广费 / 净销售额) * 100 : 0;
+
+    const 单品毛利 = 净销售额 - bucket.商品成本;
+    const 实际毛利率 = 净销售额 > 0 ? (单品毛利 / 净销售额) * 100 : 0;
+
+    const 扣点 = 销售额 * PLATFORM_FEE_RATE;
+    const 单品利润 = 单品毛利 - bucket.快递费 - bucket.运费险 - 扣点 - 推广费 - bucket.补偿;
+
+    const 实际ROI = 推广费 > 0 ? 净销售额 / 推广费 : 0;
+    const 保本分母 = 单品利润 + 推广费;
+    const 实际保ROI = 保本分母 > 0 ? 净销售额 / 保本分母 : 0;
+
+    let 判定: SkuVerdict;
+    if (推广费 <= 0) {
+      判定 = '无推广';
+    } else if (实际ROI < 实际保ROI) {
+      判定 = '停推广';
+    } else if (实际ROI < 实际保ROI * 1.2) {
+      判定 = '降预算';
+    } else {
+      判定 = '可放大';
+    }
+
+    rows.push({
+      款号: bucket.款号,
+      商品ID: bucket.商品ID,
+      销售额: round2(销售额),
+      退款金额: round2(退款金额),
+      订单数,
+      客单价: round2(客单价),
+      订单退款率: round2(订单退款率),
+      推广费: round2(推广费),
+      净推广占比: round2(净推广占比),
+      补偿: round2(bucket.补偿),
+      单品毛利: round2(单品毛利),
+      实际毛利率: round2(实际毛利率),
+      单品利润: round2(单品利润),
+      实际保ROI: round2(实际保ROI),
+      实际ROI: round2(实际ROI),
+      判定,
+    });
+  });
+
+  rows.sort((a, b) => b.销售额 - a.销售额);
+
+  // 统计期：取订单成交时间的最小/最大日期
+  let 统计期起 = '';
+  let 统计期止 = '';
+  orders.forEach(o => {
+    const dateStr = o.订单成交时间.split(' ')[0];
+    if (!dateStr) return;
+    if (!统计期起 || dateStr < 统计期起) 统计期起 = dateStr;
+    if (!统计期止 || dateStr > 统计期止) 统计期止 = dateStr;
+  });
+
+  const overview: SkuDetailOverview = {
+    款数: rows.length,
+    统计期起,
+    统计期止,
+    期间推广费: round2(rows.reduce((sum, r) => sum + r.推广费, 0)),
+    运费险: round2(summaries.reduce((sum, s) => {
+      const cfg: CostItem = costConfig[s.规格] || { 成本单价: 0 };
+      return sum + (cfg.启用运费险 ? (cfg.运费险 || 0) : 0) * (s.销量 || 0);
+    }, 0)),
+  };
+
+  return { rows, overview };
+}
+

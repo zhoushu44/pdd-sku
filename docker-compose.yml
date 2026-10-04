@@ -8,6 +8,9 @@ services:
     container_name: pdd-sku-manager
     ports:
       - "5173:5173"
+    volumes:
+      # 成本配置等业务数据持久化到宿主机（重建容器不丢数据）
+      - ./data:/data
     restart: unless-stopped
     networks:
       - pdd-network

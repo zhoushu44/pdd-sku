@@ -23,13 +23,14 @@ import {
 import { ProductSummary, DetailedCostConfig, CostItem, AIApplyPayload } from '../types';
 import AIPanel from './AIPanel';
 import { formatMoney } from '../lib/utils';
+import { clearCostConfig } from '../lib/configStore';
 
 interface CostInputPanelProps {
   productSummaries: ProductSummary[];
+  /** 成本配置（单一数据源，由 Dashboard 持有并传入） */
+  costConfig: DetailedCostConfig;
   onCostChange: (costConfig: DetailedCostConfig) => void;
 }
-
-const STORAGE_KEY = 'detailedCostConfig';
 
 const defaultCostItem: CostItem = {
   成本单价: 0,
@@ -54,6 +55,7 @@ const cloneCostItem = (item?: CostItem): CostItem => ({
 
 export const CostInputPanel: React.FC<CostInputPanelProps> = ({
   productSummaries,
+  costConfig,
   onCostChange,
 }) => {
   const [batchSourceSpec, setBatchSourceSpec] = useState<string>('');
@@ -67,6 +69,8 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
   // 清空状态：为 true 时表格不显示任何行
   const [cleared, setCleared] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  // 填写状态筛选：all 全部 / filled 已填 / unfilled 未填
+  const [fillFilter, setFillFilter] = useState<'all' | 'filled' | 'unfilled'>('all');
 
   // 合并原始 productSummaries 和导入的 extraSummaries
   const allSummaries = useMemo(() => {
@@ -75,7 +79,6 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
     const extras = extraSummaries.filter(s => !existingSpecs.has(s.规格));
     return [...productSummaries, ...extras];
   }, [productSummaries, extraSummaries, cleared]);
-  const [costConfig, setCostConfig] = useState<DetailedCostConfig>({});
   const [modalPreviewData, setModalPreviewData] = useState<{
     单件总成本: number;
     平台技术服务费: number;
@@ -88,24 +91,6 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
     发货后退款率: number;
     定价: number;
   } | null>(null);
-
-  // 从本地存储加载配置
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setCostConfig(parsed);
-      } catch (e) {
-        console.error('加载成本配置失败:', e);
-      }
-    }
-  }, []);
-
-  // 保存到本地存储
-  const saveToLocalStorage = useCallback((config: DetailedCostConfig) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  }, []);
 
   // 计算单个商品的利润
   const calculateProfit = useCallback((spec: string, configOverride?: CostItem) => {
@@ -177,11 +162,23 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
     });
   }, [editingSpec, tempCostItem, calculateProfit]);
 
-  // 获取排序后的商品列表
-  const getSortedSummaries = useCallback(() => {
-    if (!sortField) return allSummaries;
+  // 各填写档位的计数
+  const fillCounts = useMemo(() => {
+    const filled = allSummaries.filter(s => costConfig[s.规格]?.成本单价).length;
+    return { all: allSummaries.length, filled, unfilled: allSummaries.length - filled };
+  }, [allSummaries, costConfig]);
 
-    return [...allSummaries].sort((a, b) => {
+  // 获取排序后的商品列表（先按填写状态筛选，再排序）
+  const getSortedSummaries = useCallback(() => {
+    const filtered = fillFilter === 'all'
+      ? allSummaries
+      : allSummaries.filter(s =>
+          fillFilter === 'filled' ? Boolean(costConfig[s.规格]?.成本单价) : !costConfig[s.规格]?.成本单价
+        );
+
+    if (!sortField) return filtered;
+
+    return [...filtered].sort((a, b) => {
       const profitA = calculateProfit(a.规格);
       const profitB = calculateProfit(b.规格);
 
@@ -199,7 +196,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
       return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
     });
-  }, [allSummaries, sortField, sortDirection, calculateProfit]);
+  }, [allSummaries, sortField, sortDirection, calculateProfit, fillFilter, costConfig]);
 
   // 保存并关闭编辑
   const saveAndClose = useCallback(() => {
@@ -217,11 +214,9 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
       },
     };
 
-    setCostConfig(nextConfig);
     onCostChange(nextConfig);
-    saveToLocalStorage(nextConfig);
     setEditingSpec(null);
-  }, [editingSpec, tempCostItem, costConfig, onCostChange, saveToLocalStorage]);
+  }, [editingSpec, tempCostItem, costConfig, onCostChange]);
 
   // 切换启用状态
   const toggleSwitch = useCallback((field: keyof CostItem) => {
@@ -361,6 +356,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
             快递费: 0,
             包装耗材: 0,
             运费险: 0,
+            退款金额: 0,
             退款率: 0,
             真实退款率: 0,
             发货后退款率: 0,
@@ -403,21 +399,37 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
         setExtraSummaries(prev => [...prev, ...newSummaries]);
       }
 
-      setCostConfig(nextConfig);
       onCostChange(nextConfig);
-      saveToLocalStorage(nextConfig);
       alert(`已导入 ${matched} 条配置${priceColumn ? `（定价来源：${priceColumn}）` : ''}${newSummaries.length > 0 ? `，新增 ${newSummaries.length} 个规格` : ''}。`);
     } catch (error) {
       alert(error instanceof Error ? error.message : '导入失败，请检查文件内容');
     } finally {
       event.target.value = '';
     }
-  }, [costConfig, allSummaries, onCostChange, saveToLocalStorage]);
+  }, [costConfig, allSummaries, onCostChange]);
 
   // 打开编辑模态框
   const openEditModal = useCallback((spec: string) => {
     setEditingSpec(spec);
-    setTempCostItem(costConfig[spec] || defaultCostItem);
+
+    // 同商品成本自动继承：该规格未配置时，套用同商品ID下其他规格已有的成本配置
+    let initialItem = costConfig[spec];
+    if (!initialItem) {
+      const productId = allSummaries.find(s => s.规格 === spec)?.商品ID;
+      if (productId) {
+        const siblingSpec = allSummaries.find(
+          s => s.商品ID === productId && s.规格 !== spec && costConfig[s.规格]?.成本单价
+        );
+        if (siblingSpec) {
+          initialItem = {
+            ...cloneCostItem(costConfig[siblingSpec.规格]),
+            // 定价可能因规格而异，重置为 0 让用户输入
+            定价: 0,
+          };
+        }
+      }
+    }
+    setTempCostItem(cloneCostItem(initialItem));
 
     // 计算当前预览数据
     const profitData = calculateProfit(spec);
@@ -435,7 +447,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
         定价: costConfig[spec]?.定价 || 0,
       });
     }
-  }, [costConfig, calculateProfit]);
+  }, [costConfig, allSummaries, calculateProfit]);
 
   // 关闭模态框
   const closeModal = useCallback(() => {
@@ -457,30 +469,66 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
         定价: value,
       },
     };
-    setCostConfig(nextConfig);
     onCostChange(nextConfig);
-    saveToLocalStorage(nextConfig);
-  }, [costConfig, onCostChange, saveToLocalStorage]);
+  }, [costConfig, onCostChange]);
 
-  // 获取利润率的样式类
+  // 获取利润率的样式类（全站统一四档）
   const getProfitRateClass = useCallback((rate: number) => {
-    if (rate >= 15) return 'text-emerald-400 bg-emerald-500/10';
-    if (rate >= 10) return 'text-green-400 bg-green-500/10';
-    if (rate >= 5) return 'text-amber-400 bg-amber-500/10';
-    if (rate >= 0) return 'text-yellow-400 bg-yellow-500/10';
-    return 'text-red-400 bg-red-500/10';
+    if (rate >= 15) return 'text-emerald-600 bg-emerald-50';
+    if (rate >= 5) return 'text-cyan-600 bg-cyan-50';
+    if (rate >= 0) return 'text-amber-600 bg-amber-50';
+    return 'text-red-600 bg-red-50';
   }, []);
 
   const sortedSummaries = getSortedSummaries();
 
   return (
-    <div className="bg-slate-900 rounded-xl border border-slate-700/50 overflow-hidden">
-      <div className="p-4 flex items-center justify-between">
-        <h3 className="text-lg font-bold text-white">成本配置</h3>
-        <div className="flex items-center gap-2">
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="p-4 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          <h3 className="text-base font-bold text-slate-900">成本配置</h3>
+          {/* 填写状态筛选：全部 / 已填 / 未填 */}
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5">
+            {([
+              { key: 'all', label: '全部', count: fillCounts.all, activeClass: 'bg-slate-600 text-white' },
+              { key: 'filled', label: '已填', count: fillCounts.filled, activeClass: 'bg-emerald-600 text-white' },
+              { key: 'unfilled', label: '未填', count: fillCounts.unfilled, activeClass: 'bg-amber-500 text-white' },
+            ] as const).map(({ key, label, count, activeClass }) => (
+              <button
+                key={key}
+                onClick={() => setFillFilter(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                  fillFilter === key ? activeClass : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {label}
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[13px] font-semibold ${
+                    fillFilter === key
+                      ? key === 'filled'
+                        ? 'bg-white/20 text-white'
+                        : key === 'unfilled'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white/20 text-white'
+                      : count > 0
+                      ? key === 'filled'
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : key === 'unfilled'
+                        ? 'bg-amber-500/20 text-amber-600'
+                        : 'bg-slate-200 text-slate-500'
+                      : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowAIPanel(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-md text-sm transition-colors shadow-lg shadow-purple-500/20"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg text-[13px] transition-colors shadow-sm"
           >
             <Sparkles className="w-4 h-4" />
             一键 AI
@@ -488,7 +536,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
           <button
             onClick={() => document.getElementById('batch-import')?.click()}
             title="表格来源：店透视插件-SKU预览-导出表格（支持淘宝、拼多多等电商平台）"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-[13px] transition-colors"
           >
             <CircleHelp className="w-4 h-4" />
             批量导入
@@ -503,7 +551,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
           <button
             onClick={() => {
               const headers = '规格\t原材料成本\t人工成本\t运营成本\t商家承担优惠\t快递费\t包装耗材\t运费险\t定价\t退款率';
-              const content = sortedSummaries
+              const content = allSummaries
                 .map(s => {
                   const config = costConfig[s.规格] || defaultCostItem;
                   return `${s.规格}\t${config.成本单价}\t${config.人工成本}\t${config.运营成本}\t${config.商家承担优惠}\t${config.快递费}\t${config.包装耗材}\t${config.运费险}\t${config.定价}\t${config.退款率}`;
@@ -521,7 +569,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
               URL.revokeObjectURL(url);
             }}
             title="表格来源：导出的表格（可作为批量导入文件使用）"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-[13px] transition-colors"
           >
             <CircleHelp className="w-4 h-4" />
             批量导出
@@ -530,7 +578,6 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
             onClick={() => {
               if (!confirm('确定清空所有行和数据吗？')) return;
               setCleared(true);
-              setCostConfig({});
               setExtraSummaries([]);
               setBatchSourceSpec('');
               setSortField(null);
@@ -539,9 +586,9 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
               setTempCostItem(defaultCostItem);
               setModalPreviewData(null);
               onCostChange({});
-              localStorage.removeItem(STORAGE_KEY);
+              clearCostConfig();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-md text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[13px] transition-colors shadow-sm"
           >
             <Trash2 className="w-4 h-4" />
             清空
@@ -552,11 +599,11 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-900/50 text-slate-400 text-sm">
-              <th className="py-2 px-3 text-left">规格</th>
-              <th className="py-2 px-3 text-left">商品ID</th>
+            <tr className="bg-slate-100 text-[13px] font-medium text-slate-500">
+              <th className="px-3 py-2.5 text-left">规格</th>
+              <th className="px-3 py-2.5 text-left">商品ID</th>
               <th
-                className="py-2 px-3 text-left cursor-pointer hover:bg-slate-800/50"
+                className="px-3 py-2.5 text-left cursor-pointer hover:text-slate-700"
                 onClick={() => {
                   if (sortField === '成本单价') {
                     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -574,7 +621,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                 </div>
               </th>
               <th
-                className="py-2 px-3 text-left cursor-pointer hover:bg-slate-800/50"
+                className="px-3 py-2.5 text-left cursor-pointer hover:text-slate-700"
                 onClick={() => {
                   if (sortField === '定价') {
                     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -592,7 +639,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                 </div>
               </th>
               <th
-                className="py-2 px-3 text-left cursor-pointer hover:bg-slate-800/50"
+                className="px-3 py-2.5 text-left cursor-pointer hover:text-slate-700"
                 onClick={() => {
                   if (sortField === '利润率') {
                     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -610,7 +657,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                 </div>
               </th>
               <th
-                className="py-2 px-3 text-left cursor-pointer hover:bg-slate-800/50"
+                className="px-3 py-2.5 text-left cursor-pointer hover:text-slate-700"
                 onClick={() => {
                   if (sortField === '保本投产') {
                     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -628,7 +675,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                 </div>
               </th>
               <th
-                className="py-2 px-3 text-left cursor-pointer hover:bg-slate-800/50"
+                className="px-3 py-2.5 text-left cursor-pointer hover:text-slate-700"
                 onClick={() => {
                   if (sortField === '净利润') {
                     setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -647,18 +694,27 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
+            {sortedSummaries.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-400 text-[13px]">
+                  {fillFilter === 'filled' && '暂无已填成本的规格'}
+                  {fillFilter === 'unfilled' && '太棒了，所有规格的成本都已填写'}
+                  {fillFilter === 'all' && '暂无数据，点击右上角「批量导入」或「一键 AI」添加'}
+                </td>
+              </tr>
+            )}
             {sortedSummaries.map((item) => {
               const summary = calculateProfit(item.规格);
               return (
                 <tr
                   key={item.规格}
-                  className={editingSpec === item.规格 ? 'bg-slate-800' : 'hover:bg-slate-800/50'}
+                  className={editingSpec === item.规格 ? 'bg-slate-100' : 'hover:bg-slate-50 transition-colors'}
                 >
-                  <td className="py-3 px-3 text-white" title={item.商品名称}>
+                  <td className="py-3 px-3 text-slate-900" title={item.商品名称}>
                     <div className="max-w-[420px] truncate">{item.规格}</div>
                   </td>
-                  <td className="py-3 px-3 text-gray-400 text-xs">
+                  <td className="py-3 px-3 text-slate-500 text-[13px]">
                     <div className="max-w-[120px] truncate" title={item.商品ID}>
                       {item.商品ID || '-'}
                     </div>
@@ -668,8 +724,8 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                       onClick={() => openEditModal(item.规格)}
                       className={`w-full px-3 py-1.5 rounded-md text-right font-medium transition-all ${
                         costConfig[item.规格]?.成本单价
-                          ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30'
-                          : 'bg-slate-700 text-gray-400 border border-slate-600 hover:border-blue-500/50 hover:text-blue-300'
+                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-slate-100 text-slate-500 border border-slate-300 hover:border-emerald-500/50 hover:text-emerald-600'
                       }`}
                     >
                       {costConfig[item.规格]?.成本单价
@@ -685,19 +741,19 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                         handlePriceInlineChange(item.规格, parseFloat(e.target.value) || 0)
                       }
                       placeholder="输入定价"
-                      className="w-24 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded-md text-right text-emerald-400 font-medium placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                      className="w-24 px-2 py-1.5 bg-white border border-slate-300 rounded-md text-right text-emerald-600 font-medium placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                       min="0"
                       step="0.01"
                     />
                   </td>
                   <td
                     className={`py-3 px-3 text-right font-bold px-2 py-1 rounded ${
-                      summary ? getProfitRateClass(summary.利润率) : 'text-gray-500'
+                      summary ? getProfitRateClass(summary.利润率) : 'text-slate-'
                     }`}
                   >
                     {summary ? `${summary.利润率.toFixed(2)}%` : '-'}
                   </td>
-                  <td className="py-3 px-3 text-right font-medium text-cyan-400">
+                  <td className="py-3 px-3 text-right font-medium text-cyan-600">
                     {summary == null
                       ? '-'
                       : summary.保本投产 != null
@@ -706,7 +762,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                   </td>
                   <td
                     className={`py-3 px-3 text-right font-medium ${
-                      summary ? getProfitRateClass(summary.利润率).split(' ')[0] : 'text-gray-500'
+                      summary ? getProfitRateClass(summary.利润率).split(' ')[0] : 'text-slate-'
                     }`}
                   >
                     ¥{formatMoney(summary?.净利润 || 0)}
@@ -724,13 +780,11 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
           costConfig={costConfig}
           onClose={() => setShowAIPanel(false)}
           onApply={(payload: AIApplyPayload) => {
-            setCostConfig(payload.config);
             if (payload.summaries.length > allSummaries.length) {
               const currentSpecs = new Set(productSummaries.map(item => item.规格));
               setExtraSummaries(payload.summaries.filter(item => !currentSpecs.has(item.规格)));
             }
             onCostChange(payload.config);
-            saveToLocalStorage(payload.config);
             if (payload.bundles.length > 0) {
               localStorage.setItem('aiBundleSuggestions', JSON.stringify(payload.bundles));
             }
@@ -740,32 +794,32 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
       {editingSpec && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl shadow-2xl overflow-hidden">
-            <div className="flex-shrink-0 p-4 bg-slate-900/50 flex items-center justify-between border-b border-slate-700/50">
+          <div className="bg-white border border-slate-300 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl shadow-2xl overflow-hidden">
+            <div className="flex-shrink-0 p-4 bg-white/80 flex items-center justify-between border-b border-slate-200">
               <div>
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="text-base font-bold text-slate-900">
                   编辑成本配置 - {editingSpec}
                 </h3>
               </div>
               <button
                 onClick={closeModal}
-                className="p-1 hover:bg-slate-800 rounded-lg transition-colors"
+                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-gray-400 hover:text-white" />
+                <X className="w-5 h-5 text-slate-500 hover:text-slate-900" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-blue-400 uppercase tracking-wide">
+                <h4 className="text-[13px] font-semibold text-emerald-600">
                   基本信息
                 </h4>
 
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
-                    <DollarSign className="w-4 h-4 text-yellow-400" />
+                  <label className="flex items-center gap-2 text-[13px] text-slate-500">
+                    <DollarSign className="w-4 h-4 text-yellow-600" />
                     商品成本单价（元/件）
-                    <span className="text-red-400">*</span>
+                    <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="number"
@@ -774,7 +828,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                       updateTempField('成本单价', parseFloat(e.target.value) || 0)
                     }
                     placeholder="请输入成本单价"
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                     min="0"
                     step="0.01"
                   />
@@ -783,8 +837,8 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   {/* 定价输入：编辑定价 → 自动算利润率 */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-1.5 text-sm text-gray-300">
-                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <label className="flex items-center gap-1.5 text-[13px] text-slate-500">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
                       商品定价（元/件）
                     </label>
                     <input
@@ -794,7 +848,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                         updateTempField('定价', parseFloat(e.target.value) || 0)
                       }
                       placeholder="输入定价"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                       min="0"
                       step="0.01"
                     />
@@ -802,8 +856,8 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
                   {/* 利润率输入：编辑利润率 → 反推定价 */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-1.5 text-sm text-gray-300">
-                      <Percent className="w-4 h-4 text-blue-400" />
+                    <label className="flex items-center gap-1.5 text-[13px] text-slate-500">
+                      <Percent className="w-4 h-4 text-blue-600" />
                       目标利润率（%）
                     </label>
                     <input
@@ -830,39 +884,39 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                         }
                       }}
                       placeholder="输入利润率"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                       min="-99"
                       max="99"
                       step="0.1"
                     />
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-[13px] text-slate-500">
                   定价与利润率双向联动：修改任一项，另一项自动计算
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">平台技术服务费</span>
-                  <span className="font-medium text-cyan-400">
+              <div className="p-3 bg-slate-100 rounded-lg border border-slate-300">
+                <div className="flex items-center justify-between text-[13px]">
+                  <span className="text-slate-500">平台技术服务费</span>
+                  <span className="font-medium text-cyan-600">
                     ¥{formatMoney(modalPreviewData?.平台技术服务费 || 0)}
                   </span>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-[13px] text-slate-500 mt-1">
                   费率 0.6% × 定价（未设置定价则为0）
                 </div>
               </div>
 
               <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-purple-400 uppercase tracking-wide">
+                <h4 className="text-[13px] font-semibold text-emerald-600">
                   可选成本项
                 </h4>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer flex-1">
-                      <DollarSign className="w-4 h-4 text-orange-400" />
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg border border-slate-300">
+                    <label className="flex items-center gap-2 text-[13px] text-slate-500 cursor-pointer flex-1">
+                      <DollarSign className="w-4 h-4 text-orange-600" />
                       商家承担优惠（元）
                     </label>
                     <input
@@ -872,35 +926,35 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                         updateTempField('商家承担优惠', parseFloat(e.target.value) || 0)
                       }
                       placeholder="0.00"
-                      className="w-32 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                      className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                       min="0"
                       step="0.01"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-sm text-gray-300">
+                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-100 rounded-lg border border-slate-300 text-[13px] text-slate-500">
                       人工成本（元/件）
-                      <input type="number" value={tempCostItem.人工成本 !== undefined && tempCostItem.人工成本 !== null ? String(tempCostItem.人工成本) : ''} onChange={(e) => updateTempField('人工成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" min="0" step="0.01" />
+                      <input type="number" value={tempCostItem.人工成本 !== undefined && tempCostItem.人工成本 !== null ? String(tempCostItem.人工成本) : ''} onChange={(e) => updateTempField('人工成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500" min="0" step="0.01" />
                     </label>
-                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-sm text-gray-300">
+                    <label className="flex items-center justify-between gap-3 p-3 bg-slate-100 rounded-lg border border-slate-300 text-[13px] text-slate-500">
                       运营成本（元/件）
-                      <input type="number" value={tempCostItem.运营成本 !== undefined && tempCostItem.运营成本 !== null ? String(tempCostItem.运营成本) : ''} onChange={(e) => updateTempField('运营成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" min="0" step="0.01" />
+                      <input type="number" value={tempCostItem.运营成本 !== undefined && tempCostItem.运营成本 !== null ? String(tempCostItem.运营成本) : ''} onChange={(e) => updateTempField('运营成本', parseFloat(e.target.value) || 0)} placeholder="0.00" className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500" min="0" step="0.01" />
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg border border-slate-300">
                     <div className="flex items-center gap-3 flex-1">
-                      <Truck className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-gray-300">快递费（元）</span>
+                      <Truck className="w-4 h-4 text-blue-600" />
+                      <span className="text-[13px] text-slate-500">快递费（元）</span>
                       <button
                         onClick={() => toggleSwitch('启用快递费')}
                         className="ml-2"
                       >
                         {tempCostItem.启用快递费 ? (
-                          <ToggleRight className="w-8 h-8 text-blue-500" />
+                          <ToggleRight className="w-8 h-8 text-emerald-500" />
                         ) : (
-                          <ToggleLeft className="w-8 h-8 text-gray-500" />
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
                         )}
                       </button>
                     </div>
@@ -912,25 +966,25 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                           updateTempField('快递费', parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className="w-32 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                         min="0"
                         step="0.01"
                       />
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg border border-slate-300">
                     <div className="flex items-center gap-3 flex-1">
-                      <Package className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-gray-300">包装耗材（元）</span>
+                      <Package className="w-4 h-4 text-green-600" />
+                      <span className="text-[13px] text-slate-500">包装耗材（元）</span>
                       <button
                         onClick={() => toggleSwitch('启用包装耗材')}
                         className="ml-2"
                       >
                         {tempCostItem.启用包装耗材 ? (
-                          <ToggleRight className="w-8 h-8 text-blue-500" />
+                          <ToggleRight className="w-8 h-8 text-emerald-500" />
                         ) : (
-                          <ToggleLeft className="w-8 h-8 text-gray-500" />
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
                         )}
                       </button>
                     </div>
@@ -942,25 +996,25 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                           updateTempField('包装耗材', parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className="w-32 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                         min="0"
                         step="0.01"
                       />
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg border border-slate-300">
                     <div className="flex items-center gap-3 flex-1">
                       <Shield className="w-4 h-4 text-indigo-400" />
-                      <span className="text-sm text-gray-300">商家版运费险（元）</span>
+                      <span className="text-[13px] text-slate-500">商家版运费险（元）</span>
                       <button
                         onClick={() => toggleSwitch('启用运费险')}
                         className="ml-2"
                       >
                         {tempCostItem.启用运费险 ? (
-                          <ToggleRight className="w-8 h-8 text-blue-500" />
+                          <ToggleRight className="w-8 h-8 text-emerald-500" />
                         ) : (
-                          <ToggleLeft className="w-8 h-8 text-gray-500" />
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
                         )}
                       </button>
                     </div>
@@ -972,36 +1026,36 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                           updateTempField('运费险', parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className="w-32 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-md text-right text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-right text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                         min="0"
                         step="0.01"
                       />
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg border border-slate-300">
                     <div className="flex items-center gap-3 flex-1">
-                      <Percent className="w-4 h-4 text-red-400" />
-                      <span className="text-sm text-gray-300">退款率</span>
+                      <Percent className="w-4 h-4 text-red-600" />
+                      <span className="text-[13px] text-slate-500">退款率</span>
                       <button
                         onClick={() => toggleSwitch('启用退款率')}
                         className="ml-2"
                       >
                         {tempCostItem.启用退款率 ? (
-                          <ToggleRight className="w-8 h-8 text-blue-500" />
+                          <ToggleRight className="w-8 h-8 text-emerald-500" />
                         ) : (
-                          <ToggleLeft className="w-8 h-8 text-gray-500" />
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
                         )}
                       </button>
                     </div>
                     {tempCostItem.启用退款率 && modalPreviewData && (
                       <div className="text-right">
-                        <div className="text-sm text-slate-400">
-                          退款率 <span className="font-mono text-amber-400">{modalPreviewData.真实退款率.toFixed(2)}%</span>
+                        <div className="text-[13px] text-slate-500">
+                          退款率 <span className="font-mono text-amber-600">{modalPreviewData.真实退款率.toFixed(2)}%</span>
                         </div>
-                        <div className="text-xs text-slate-400 mt-0.5">
-                          发货后退款率 <span className="font-mono text-red-400 font-semibold">{modalPreviewData.发货后退款率.toFixed(2)}%</span>
-                          <span className="text-[10px] text-slate-500 ml-1">（产生运费损失）</span>
+                        <div className="text-[13px] text-slate-500 mt-0.5">
+                          发货后退款率 <span className="font-mono text-red-600 font-semibold">{modalPreviewData.发货后退款率.toFixed(2)}%</span>
+                          <span className="text-[13px] text-slate-400 ml-1">（产生运费损失）</span>
                         </div>
                       </div>
                     )}
@@ -1011,33 +1065,33 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
               {modalPreviewData && (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wide">
+                  <h4 className="text-[13px] font-semibold text-emerald-600">
                     利润计算结果
                   </h4>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <div className="text-sm text-gray-400">单件总成本</div>
-                      <div className="text-xl font-bold text-white">
+                    <div className="p-3 bg-slate-100 rounded-lg border border-slate-300">
+                      <div className="text-[13px] text-slate-500">单件总成本</div>
+                      <div className="text-base font-bold text-slate-900">
                         ¥{formatMoney(modalPreviewData.单件总成本)}
                       </div>
                     </div>
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <div className="text-sm text-gray-400">净利润</div>
-                      <div className="text-xl font-bold text-white">
+                    <div className="p-3 bg-slate-100 rounded-lg border border-slate-300">
+                      <div className="text-[13px] text-slate-500">净利润</div>
+                      <div className="text-base font-bold text-slate-900">
                         ¥{formatMoney(modalPreviewData.净利润)}
                       </div>
                     </div>
 
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <div className="text-sm text-gray-400">利润率</div>
-                      <div className="text-xl font-bold text-white">
+                    <div className="p-3 bg-slate-100 rounded-lg border border-slate-300">
+                      <div className="text-[13px] text-slate-500">利润率</div>
+                      <div className="text-base font-bold text-slate-900">
                         {modalPreviewData.利润率.toFixed(2)}%
                       </div>
                     </div>
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <div className="text-sm text-gray-400">保本投产</div>
-                      <div className="text-xl font-bold text-white">
+                    <div className="p-3 bg-slate-100 rounded-lg border border-slate-300">
+                      <div className="text-[13px] text-slate-500">保本投产</div>
+                      <div className="text-base font-bold text-slate-900">
                         {modalPreviewData.保本投产 != null ? modalPreviewData.保本投产.toFixed(1) : '无法保本'}
                       </div>
                     </div>
@@ -1045,14 +1099,14 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
                   <div className="col-span-2 p-3 bg-indigo-500/10 rounded-lg border border-indigo-500/30">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-xs text-gray-400">
+                      <div className="text-[13px] text-slate-500">
                         定价建议
-                        <span className="ml-2 text-gray-500">
+                        <span className="ml-2 text-slate-500">
                           （基于目标利润率反推售价）
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-gray-400">目标利润率</span>
+                        <span className="text-[13px] text-slate-500">目标利润率</span>
                         <input
                           type="number"
                           value={targetProfitRate}
@@ -1060,12 +1114,12 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                             const val = Math.min(90, Math.max(0, parseFloat(e.target.value) || 0));
                             setTargetProfitRate(val);
                           }}
-                          className="w-16 px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-right text-xs text-white focus:outline-none focus:border-indigo-500"
+                          className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-right text-[13px] text-slate-900 focus:outline-none focus:border-emerald-500"
                           min="0"
                           max="90"
                           step="1"
                         />
-                        <span className="text-xs text-gray-400">%</span>
+                        <span className="text-[13px] text-slate-500">%</span>
                       </div>
                     </div>
                     {(() => {
@@ -1083,7 +1137,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                       const denominator = 1 - PLATFORM_RATE - targetRate;
                       if (denominator <= 0) {
                         return (
-                          <div className="text-xs text-red-400">
+                          <div className="text-[13px] text-red-600">
                             平台扣点(0.6%) + 目标利润率 ≥ 100%，无法计算合理售价
                           </div>
                         );
@@ -1095,17 +1149,17 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
                       return (
                         <div className="flex items-end justify-between">
                           <div>
-                            <div className="text-xl font-bold text-indigo-300">
+                            <div className="text-base font-bold text-indigo-300">
                               ¥{suggestedPrice.toFixed(2)}
                             </div>
-                            <div className="text-[10px] text-gray-500 mt-0.5">
+                            <div className="text-[13px] text-slate-500 mt-0.5">
                               = ({fixedCost.toFixed(2)} + {returnShipping.toFixed(2)}) ÷ (1 - 0.6% - {targetProfitRate}%)
                             </div>
                           </div>
                           {modalPreviewData.定价 > 0 && (
-                            <div className={`text-xs font-medium ${
-                              Math.abs(diff) < 5 ? 'text-emerald-400' :
-                              diff > 0 ? 'text-blue-400' : 'text-orange-400'
+                            <div className={`text-[13px] font-medium ${
+                              Math.abs(diff) < 5 ? 'text-emerald-600' :
+                              diff > 0 ? 'text-blue-600' : 'text-orange-600'
                             }`}
                             >
                               当前定价{diff > 0 ? '高' : '低'}于建议 {Math.abs(diff).toFixed(1)}%
@@ -1119,23 +1173,23 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
               )}
 
               {!modalPreviewData && (
-                <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700 text-center text-gray-400 text-sm">
+                <div className="p-4 bg-slate-100 rounded-lg border border-slate-300 text-center text-slate-500 text-[13px]">
                   请设置成本单价和定价后查看利润计算结果
                 </div>
               )}
             </div>
 
-            <div className="flex-shrink-0 bg-slate-900 border-t border-slate-700 px-6 py-4 flex items-center justify-end gap-3 rounded-b-xl">
+            <div className="flex-shrink-0 bg-white border-t border-slate-300 px-6 py-4 flex items-center justify-end gap-3 rounded-b-xl">
               <button
                 onClick={closeModal}
-                className="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg transition-colors"
+                className="px-4 py-2 text-[13px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={saveAndClose}
                 disabled={!tempCostItem.成本单价}
-                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-[13px] bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >
                 <Check className="w-4 h-4" />
                 保存并关闭

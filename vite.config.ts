@@ -1,7 +1,83 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
+import fs from 'node:fs'
+import path from 'node:path'
+
+// 开发环境模拟配置持久化 API（生产环境由 nginx dav 模块提供同接口）
+// GET /api/config/:key    读取 JSON 配置（404 表示无配置）
+// PUT /api/config/:key    写入 JSON 配置
+// DELETE /api/config/:key 删除配置
+function configStorePlugin(): Plugin {
+  const dataDir = path.resolve(__dirname, '.data')
+  return {
+    name: 'dev-config-store',
+    configureServer(server) {
+      // 确保数据目录存在
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
+
+      server.middlewares.use('/api/config', (req, res, next) => {
+        // 解析 /api/config/<key> 中的 key（去掉 query 和首尾斜杠）
+        const key = (req.url || '').split('?')[0].replace(/^\/+|\/+$/g, '')
+        if (!key || !/^[\w.-]+$/.test(key)) {
+          res.statusCode = 400
+          res.end('invalid config key')
+          return
+        }
+        const filePath = path.join(dataDir, `${key}.json`)
+
+        // 简单 CORS
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.end()
+          return
+        }
+
+        if (req.method === 'GET') {
+          if (!fs.existsSync(filePath)) {
+            res.statusCode = 404
+            res.end()
+            return
+          }
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(fs.readFileSync(filePath, 'utf-8'))
+          return
+        }
+
+        if (req.method === 'PUT') {
+          const chunks: Buffer[] = []
+          req.on('data', (chunk) => chunks.push(chunk))
+          req.on('end', () => {
+            try {
+              const body = Buffer.concat(chunks).toString('utf-8')
+              JSON.parse(body) // 校验必须是合法 JSON
+              fs.writeFileSync(filePath, body, 'utf-8')
+              res.statusCode = 201
+              res.end('{"ok":true}')
+            } catch {
+              res.statusCode = 400
+              res.end('invalid JSON')
+            }
+          })
+          return
+        }
+
+        if (req.method === 'DELETE') {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+          res.statusCode = 200
+          res.end('{"ok":true}')
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -18,6 +94,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    configStorePlugin(),
     react({
       babel: {
         plugins: [
@@ -33,7 +110,7 @@ export default defineConfig({
       clickUrl: 'https://www.trae.ai/solo?showJoin=1',
       autoTheme: true,
       autoThemeTarget: '#root'
-    }), 
+    }),
     tsconfigPaths()
   ],
 })

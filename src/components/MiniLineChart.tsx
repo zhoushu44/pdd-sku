@@ -17,9 +17,9 @@ const MiniLineChart: React.FC<MiniLineChartProps> = ({
     return (
       <div
         style={{ width, height }}
-        className="flex items-center justify-center bg-slate-800/50 rounded"
+        className="flex items-center justify-center bg-slate-100 rounded"
       >
-        <span className="text-xs text-slate-500">暂无数据</span>
+        <span className="text-[13px] text-slate-400">暂无数据</span>
       </div>
     );
   }

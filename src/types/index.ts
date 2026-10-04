@@ -46,6 +46,7 @@ export interface ProductSummary {
   快递费: number;         // 用户输入的快递费（单件或总费用）
   包装耗材: number;       // 用户输入的包装耗材费用
   运费险: number;         // 用户输入的商家版运费险费用
+  退款金额: number;       // 退款成功订单的商家实收金额（净销售额 = 销售额 - 退款金额）
   退款率: number;         // 可选，退款比例 (0-100)，用户手动输入
   真实退款率: number;     // 从订单数据自动计算的退款率（按金额：退款成功额 / 总销售额 * 100）
   发货后退款率: number;   // 发货后退款额 / (有效销售额 + 退款成功额) * 100（用于计算运费损失）
@@ -72,6 +73,7 @@ export interface CostItem {
   包装耗材?: number;      // 包装耗材（可选）
   运费险?: number;        // 商家版运费险（可选）
   退款率?: number;        // 退款率百分比（可选，0-100）
+  补偿?: number;          // 该款补偿金额（可选，计入单品利润）
 
   // 开关控制（是否启用该项）
   启用快递费?: boolean;
@@ -199,6 +201,8 @@ export interface PeriodComparison {
   订单数: MetricComparison;
   商家实收: MetricComparison;
   平均客单价: MetricComparison;
+  利润率: MetricComparison;   // 整体净利润率（%）环比
+  推广ROI: MetricComparison;  // 推广投产比（交易额 / 营销花费）环比
 }
 
 // ============ 智能运营建议 ============
@@ -310,4 +314,41 @@ export interface AIApplyPayload {
   config: DetailedCostConfig;
   summaries: ProductSummary[];
   bundles: BundleSuggestion[];
+}
+
+// ============ 单品明细（推广决策） ============
+
+// 单品明细维度：sku=按规格明细，product=按商品ID汇总
+export type SkuDetailDimension = 'sku' | 'product';
+
+// 推广决策判定
+export type SkuVerdict = '停推广' | '降预算' | '可放大' | '无推广';
+
+// 单品明细行（按款/规格维度）
+export interface SkuDetailRow {
+  款号: string;          // 规格/款号
+  商品ID: string;
+  销售额: number;
+  退款金额: number;
+  订单数: number;
+  客单价: number;        // 销售额 ÷ 订单数
+  订单退款率: number;    // 退款金额 ÷ 销售额 × 100
+  推广费: number;        // 分摊推广费
+  净推广占比: number;    // 分摊推广费 ÷ 净销售额 × 100
+  补偿: number;          // 该款补偿
+  单品毛利: number;      // 净销售额 - 商品成本
+  实际毛利率: number;    // 单品毛利 ÷ 净销售额 × 100
+  单品利润: number;      // 单品毛利 - 快递 - 运费险 - 扣点 - 分摊推广费 - 补偿
+  实际保ROI: number;     // 净销售额 ÷ (单品利润 + 分摊推广费)
+  实际ROI: number;       // 净销售额 ÷ 分摊推广费
+  判定: SkuVerdict;
+}
+
+// 单品明细汇总（表头统计）
+export interface SkuDetailOverview {
+  款数: number;
+  统计期起: string;
+  统计期止: string;
+  期间推广费: number;    // 所有款的推广费合计
+  运费险: number;        // 运费险合计
 }

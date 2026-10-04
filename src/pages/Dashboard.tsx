@@ -1,20 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import OrderOverview from '../components/OrderOverview';
 import ProductAnalysis from '../components/ProductAnalysis';
+import SkuDetail from '../components/SkuDetail';
 import CostInputPanel from '../components/CostInputPanel';
 import MarketingAnalysis from '../components/MarketingAnalysis';
 import RefundAnalysis from '../components/RefundAnalysis';
 import AdviceCenter from '../components/AdviceCenter';
-import { parseOrderData, parseMarketingCSV, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison } from '../utils/dataProcessor';
+import { parseOrderData, parseMarketingCSV, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison, mergeOrders, mergeMarketingRows } from '../utils/dataProcessor';
 import { OrderData, DetailedCostConfig, MarketingDataRow, TimeRange } from '../types';
-import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, RefreshCcw, Lightbulb, CircleHelp } from 'lucide-react';
+import { loadCostConfig, saveCostConfig } from '../lib/configStore';
+import { loadSalesOrders, saveSalesOrders, loadMarketingData, saveMarketingData, clearSalesOrders, clearMarketingData } from '../lib/dataStore';
+import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, CircleHelp, Trash2 } from 'lucide-react';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [marketingData, setMarketingData] = useState<MarketingDataRow[]>([]);
+  // 当前订单是否来自内置样例（public/orders.csv）。为真时首次上传直接覆盖，避免样例数据混入
+  const [isSampleData, setIsSampleData] = useState(false);
   const [costConfig, setCostConfig] = useState<DetailedCostConfig>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sku' | 'product' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice'>('overview');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [searchProductId, setSearchProductId] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -67,8 +72,8 @@ export default function Dashboard() {
 
   // 环比对比（基于全部订单，按当前时间范围计算）
   const periodComparison = useMemo(
-    () => calculatePeriodComparison(orders, timeRange),
-    [orders, timeRange]
+    () => calculatePeriodComparison(orders, timeRange, costConfig, marketingData),
+    [orders, timeRange, costConfig, marketingData]
   );
 
   // 触发商品ID查询
@@ -83,19 +88,45 @@ export default function Dashboard() {
     setSearchProductId('');
   };
 
-  // 加载销售数据（CSV）
+  // 加载销售数据：优先已持久化数据，无则回退内置样例 CSV
   const loadSalesData = async () => {
     try {
       setLoading(true);
+      const saved = await loadSalesOrders();
+      // saved 为 null 表示从未上传（回退样例）；为数组（含空数组=已清空）则直接采用
+      if (saved !== null) {
+        setOrders(saved);
+        setIsSampleData(false);
+        return;
+      }
+      // 无持久化数据 → 加载内置样例
       const response = await fetch('/orders.csv');
       const csvText = await response.text();
       const parsedOrders = parseOrderData(csvText);
       setOrders(parsedOrders);
+      setIsSampleData(true);
     } catch (error) {
       console.error('加载销售数据失败:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // 加载营销数据：优先已持久化数据
+  const loadMarketingDataFromStore = async () => {
+    const saved = await loadMarketingData();
+    if (saved !== null) setMarketingData(saved);
+  };
+
+  // 清空全部上传数据（订单 + 营销），并持久化空状态
+  const handleClearAllData = async () => {
+    if (!confirm('确定清空全部上传数据吗？\n将删除已导入的销售订单和推广数据（成本配置不受影响）。')) return;
+    setOrders([]);
+    setMarketingData([]);
+    setIsSampleData(false);
+    setSearchInput('');
+    setSearchProductId('');
+    await Promise.all([clearSalesOrders(), clearMarketingData()]);
   };
 
   // 处理推广数据文件上传
@@ -120,7 +151,13 @@ export default function Dashboard() {
         alert('文件解析失败，请检查推广数据表头和格式');
         return;
       }
-      setMarketingData(parsedMarketing);
+      // 与已有数据合并去重（支持最近30天/多店铺多文件累计导入）
+      const { merged, added, duplicates } = mergeMarketingRows(marketingData, parsedMarketing);
+      setMarketingData(merged);
+      await saveMarketingData(merged);
+      if (duplicates > 0) {
+        alert(`推广数据导入完成：新增 ${added} 条，去重 ${duplicates} 条（共 ${merged.length} 条）`);
+      }
       setActiveTab('marketing');
     } catch (error) {
       console.error('解析推广数据失败:', error);
@@ -132,38 +169,45 @@ export default function Dashboard() {
 
   // 初始加载
   useEffect(() => {
-    // 从localStorage加载成本配置（兼容新旧key）
-    const savedConfig = localStorage.getItem('detailedCostConfig') || localStorage.getItem('costConfig');
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig);
-        setCostConfig(parsed);
-      } catch (e) {
-        console.error('解析成本配置失败:', e);
-      }
-    }
-    
+    // 成本配置：服务器优先加载（聚水潭式资料库），失败回退 localStorage
+    loadCostConfig().then((config) => {
+      if (config) setCostConfig(config);
+    });
+
     loadSalesData();
+    loadMarketingDataFromStore();
   }, []);
 
-  // 成本变更处理
+  // 成本变更处理（localStorage + 服务器双写持久化）
   const handleCostChange = useCallback((newCostConfig: DetailedCostConfig) => {
     setCostConfig(newCostConfig);
-    localStorage.setItem('detailedCostConfig', JSON.stringify(newCostConfig));
+    saveCostConfig(newCostConfig);
   }, []);
 
-  // 处理销售数据文件上传
+  // 处理销售数据文件上传（合并去重 + 持久化）
   const handleSalesFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
           const text = event.target?.result as string;
           const parsedOrders = parseOrderData(text);
-          setOrders(parsedOrders);
+          if (parsedOrders.length === 0) {
+            alert('文件解析失败，请检查销售数据表头和格式');
+            return;
+          }
+          // 样例数据或首次上传：直接覆盖；否则与已有数据合并去重
+          const base = isSampleData ? [] : orders;
+          const { merged, added, duplicates } = mergeOrders(base, parsedOrders);
+          setOrders(merged);
+          setIsSampleData(false);
+          await saveSalesOrders(merged);
+          if (duplicates > 0) {
+            alert(`销售数据导入完成：新增 ${added} 条，去重 ${duplicates} 条（共 ${merged.length} 条）`);
+          }
           setActiveTab('overview');
         } catch (error) {
           console.error('解析销售数据失败:', error);
@@ -185,42 +229,46 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <RefreshCw className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-white text-lg">正在加载数据...</p>
+          <RefreshCw className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-500 text-[13px]">正在加载数据...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
+    <div className="min-h-screen bg-slate-50">
       {/* 顶部导航栏 */}
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50 sticky top-0 z-50">
+      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-[1920px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
                 <LayoutDashboard className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">电商数据分析仪表板</h1>
-                <p className="text-xs text-slate-400">支持销售数据与推广数据分析 | 成本输入与利润计算</p>
+                <h1 className="text-base font-bold text-slate-900">电商数据分析仪表板</h1>
+                <p className="text-[13px] text-slate-500">支持销售数据与推广数据分析 | 成本输入与利润计算</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               {/* 刷新按钮 */}
               <button
                 onClick={loadSalesData}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                title="重新载入已保存的数据（本地/服务器）"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[13px] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 刷新数据
               </button>
 
-              <label className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer">
+              <label
+                title="支持多次上传、多店铺/多日期段累计导入，自动按订单号去重并持久化保存"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[13px] transition-colors cursor-pointer shadow-sm"
+              >
                 <Upload className="w-4 h-4" />
                 上传销售 CSV
                 <input
@@ -232,8 +280,8 @@ export default function Dashboard() {
               </label>
 
               <label
-                title="推广数据表下载：拼多多推广后台 → 报表/数据 → 导出报表（支持 Excel/CSV）"
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer"
+                title="推广数据表下载：拼多多推广后台 → 报表/数据 → 导出报表（支持 Excel/CSV）。支持多次上传累计导入，自动去重并持久化"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[13px] transition-colors cursor-pointer"
               >
                 <CircleHelp className="w-4 h-4" />
                 推广数据
@@ -245,7 +293,16 @@ export default function Dashboard() {
                 />
               </label>
 
-              <div className="text-sm text-slate-400">
+              <button
+                onClick={handleClearAllData}
+                title="清空已导入的销售订单与推广数据（成本配置不受影响）"
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[13px] transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                清空数据
+              </button>
+
+              <div className="text-[13px] text-slate-500">
                 更新: {new Date().toLocaleDateString('zh-CN')}
               </div>
             </div>
@@ -256,7 +313,7 @@ export default function Dashboard() {
       {/* 数据状态栏 */}
       <div className="max-w-[1920px] mx-auto px-6 pt-4 space-y-3">
         {/* 商品ID搜索栏 */}
-        <div className="bg-slate-800/30 rounded-lg px-4 py-3 border border-slate-700/30 flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-white rounded-xl px-4 py-3 border border-slate-200 flex items-center justify-between gap-4 flex-wrap">
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -265,13 +322,13 @@ export default function Dashboard() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="输入商品ID查询（如 123456）"
-                className="pl-9 pr-3 py-1.5 bg-slate-900/60 border border-slate-700/50 rounded-md text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 w-72"
+                className="pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-[13px] text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 w-72"
               />
               {searchInput && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   title="清除"
                 >
                   <X className="w-4 h-4" />
@@ -280,19 +337,19 @@ export default function Dashboard() {
             </div>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-sm transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[13px] transition-colors shadow-sm"
             >
               <Search className="w-3.5 h-3.5" />
               查询
             </button>
             {searchProductId && (
-              <div className="flex items-center gap-2 ml-2 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-md">
-                <span className="text-xs text-cyan-300">当前查询:</span>
-                <span className="text-sm text-white font-mono">{searchProductId}</span>
+              <div className="flex items-center gap-2 ml-2 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
+                <span className="text-[13px] text-emerald-700">当前查询:</span>
+                <span className="text-[13px] text-slate-700 font-mono">{searchProductId}</span>
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="text-cyan-400 hover:text-white"
+                  className="text-emerald-600 hover:text-slate-700"
                   title="取消查询"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -300,49 +357,49 @@ export default function Dashboard() {
               </div>
             )}
           </form>
-          <div className="text-xs text-slate-400">
+          <div className="text-[13px] text-slate-500">
             {searchProductId
               ? `已按商品ID筛选：仅显示包含 "${searchProductId}" 的数据`
               : '未启用商品ID筛选：显示全部数据'}
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-slate-800/30 rounded-lg px-4 py-3 border border-slate-700/30">
-          <div className="flex items-center gap-6 text-sm">
+        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-slate-200 flex-wrap gap-3">
+          <div className="flex items-center gap-6 text-[13px]">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-green-400" />
-              <span className="text-slate-300">
-                销售订单: <strong className="text-white">{filteredOrders.length}</strong> 条
+              <ShoppingCart className="w-4 h-4 text-emerald-600" />
+              <span className="text-slate-500">
+                销售订单: <strong className="text-slate-900">{filteredOrders.length}</strong> 条
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-blue-400" />
-              <span className="text-slate-300">
-                商品规格: <strong className="text-white">{filteredSummaries.length}</strong> 个
+              <LayoutDashboard className="w-4 h-4 text-cyan-600" />
+              <span className="text-slate-500">
+                商品规格: <strong className="text-slate-900">{filteredSummaries.length}</strong> 个
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Megaphone className="w-4 h-4 text-purple-400" />
-              <span className="text-slate-300">
-                推广记录: <strong className="text-white">{filteredMarketingData.length}</strong> 条
+              <Megaphone className="w-4 h-4 text-purple-600" />
+              <span className="text-slate-500">
+                推广记录: <strong className="text-slate-900">{filteredMarketingData.length}</strong> 条
               </span>
             </div>
           </div>
-          
+
           {/* 时间筛选 + 快速跳转按钮 */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* 时间筛选 */}
-            <div className="flex items-center gap-2 bg-slate-900/50 rounded-md p-1 border border-slate-700/50">
+            <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 border border-slate-200">
               <Calendar className="w-3.5 h-3.5 text-slate-400 ml-1.5" />
               <div className="flex gap-0.5">
                 {timeRangeOptions.map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => setTimeRange(opt.value)}
-                    className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                    className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
                       timeRange === opt.value
-                        ? 'bg-cyan-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-white'
                     }`}
                   >
                     {opt.label}
@@ -352,65 +409,29 @@ export default function Dashboard() {
             </div>
 
             {/* 快速跳转按钮 */}
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setActiveTab('overview')}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'overview'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >总览</button>
-              <button
-                onClick={() => setActiveTab('analysis')}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'analysis'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                商品分析
-              </button>
-              <button
-                onClick={() => setActiveTab('cost')}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'cost'
-                    ? 'bg-orange-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >利润计算</button>
-              <button
-                onClick={() => setActiveTab('marketing')}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'marketing'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                营销数据
-              </button>
-              <button
-                onClick={() => setActiveTab('refund')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'refund'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                <RefreshCcw className="w-3 h-3" />
-                退款分析
-              </button>
-              <button
-                onClick={() => setActiveTab('advice')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs transition-colors ${
-                  activeTab === 'advice'
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                <Lightbulb className="w-3 h-3" />
-                智能建议
-              </button>
+            <div className="flex gap-1.5 flex-wrap">
+              {([
+                { tab: 'product', label: '单品明细' },
+                { tab: 'sku', label: 'SKU明细' },
+                { tab: 'overview', label: '总览' },
+                { tab: 'analysis', label: '商品分析' },
+                { tab: 'cost', label: '利润计算' },
+                { tab: 'marketing', label: '营销数据' },
+                { tab: 'refund', label: '退款分析' },
+                { tab: 'advice', label: '智能建议' },
+              ] as const).map(({ tab, label }) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
+                    activeTab === tab
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-white border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -418,12 +439,33 @@ export default function Dashboard() {
 
       {/* 主内容区 */}
       <main className="max-w-[1920px] mx-auto px-6 py-8">
+        {activeTab === 'sku' && (
+          <SkuDetail
+            summaries={filteredSummaries}
+            marketingData={filteredMarketingData}
+            costConfig={costConfig}
+            orders={filteredOrders}
+            dimension="sku"
+          />
+        )}
+
+        {activeTab === 'product' && (
+          <SkuDetail
+            summaries={filteredSummaries}
+            marketingData={filteredMarketingData}
+            costConfig={costConfig}
+            orders={filteredOrders}
+            dimension="product"
+          />
+        )}
+
         {activeTab === 'overview' && (
           <OrderOverview
             orders={filteredOrders}
             summaries={filteredSummaries}
             costConfig={costConfig}
             periodComparison={periodComparison}
+            marketingData={filteredMarketingData}
           />
         )}
 
@@ -437,6 +479,7 @@ export default function Dashboard() {
         {activeTab === 'cost' && (
           <CostInputPanel
             productSummaries={filteredSummaries}
+            costConfig={costConfig}
             onCostChange={handleCostChange}
           />
         )}
@@ -464,8 +507,8 @@ export default function Dashboard() {
       </main>
 
       {/* 底部信息 */}
-      <footer className="mt-8 py-6 border-t border-slate-700/50 text-center">
-        <p className="text-sm text-slate-500">
+      <footer className="mt-8 py-6 border-t border-slate-200 text-center">
+        <p className="text-[13px] text-slate-500">
           电商数据分析仪表板 | 支持多数据源导入 | 实时计算成本与利润
         </p>
       </footer>

@@ -34,30 +34,30 @@ const levelConfig: Record<AdviceLevel, {
 }> = {
   critical: {
     label: '严重',
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10',
-    borderColor: 'border-red-500/30',
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-red-200',
     icon: AlertCircle,
   },
   warning: {
     label: '警告',
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-500/10',
-    borderColor: 'border-orange-500/30',
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200',
     icon: AlertTriangle,
   },
   info: {
     label: '提示',
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10',
-    borderColor: 'border-blue-500/30',
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200',
     icon: Info,
   },
   success: {
     label: '良好',
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/10',
-    borderColor: 'border-emerald-500/30',
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
     icon: CheckCircle2,
   },
 };
@@ -100,10 +100,10 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
 
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
         <Lightbulb className="w-12 h-12 mb-4 opacity-50" />
-        <p className="text-lg">暂无数据</p>
-        <p className="text-sm mt-2">请先上传销售订单CSV文件</p>
+        <p className="text-base">暂无数据</p>
+        <p className="text-[13px] mt-2">请先上传销售订单CSV文件</p>
       </div>
     );
   }
@@ -123,8 +123,8 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className={`text-xs ${config.color} mb-1`}>{config.label}</div>
-                  <div className="text-2xl font-bold text-slate-100">{count}</div>
+                  <div className={`text-[13px] ${config.color} mb-1`}>{config.label}</div>
+                  <div className="text-base font-bold text-slate-900">{count}</div>
                 </div>
                 <Icon className={`w-8 h-8 ${config.color} opacity-50`} />
               </div>
@@ -142,11 +142,11 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
           return (
             <div
               key={cat}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-full text-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-full text-[13px]"
             >
-              <Icon className="w-3 h-3 text-slate-400" />
-              <span className="text-slate-300">{config.label}</span>
-              <span className="text-slate-500">({count})</span>
+              <Icon className="w-3 h-3 text-slate-500" />
+              <span className="text-slate-600">{config.label}</span>
+              <span className="text-slate-400">({count})</span>
             </div>
           );
         })}
@@ -154,10 +154,10 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
 
       {/* 建议列表 */}
       {adviceList.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
           <CheckCircle2 className="w-12 h-12 mb-4 text-emerald-500/50" />
-          <p className="text-lg">暂无建议</p>
-          <p className="text-sm mt-2">当前数据未发现需要关注的问题</p>
+          <p className="text-base">暂无建议</p>
+          <p className="text-[13px] mt-2">当前数据未发现需要关注的问题</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -178,23 +178,23 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h4 className="text-sm font-medium text-slate-100">{advice.title}</h4>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${config.bgColor} ${config.color}`}>
+                      <h4 className="text-[13px] font-medium text-slate-900">{advice.title}</h4>
+                      <span className={`text-[13px] px-2 py-0.5 rounded-full ${config.bgColor} ${config.color} border ${config.borderColor}`}>
                         {config.label}
                       </span>
-                      <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-slate-800/50 text-slate-400">
+                      <span className="flex items-center gap-1 text-[13px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
                         <CatIcon className="w-3 h-3" />
                         {catConfig.label}
                       </span>
                       {advice.metric && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-800/50 text-slate-300 font-mono">
+                        <span className="text-[13px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-mono">
                           {advice.metric}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mb-2">{advice.description}</p>
-                    <div className="flex items-start gap-1.5 text-xs text-slate-300 bg-slate-900/30 rounded px-2 py-1.5">
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-[13px] text-slate-500 mb-2">{advice.description}</p>
+                    <div className="flex items-start gap-1.5 text-[13px] text-slate-600 bg-slate-50 rounded-md px-2 py-1.5">
+                      <Lightbulb className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
                       <span>{advice.suggestion}</span>
                     </div>
                   </div>
