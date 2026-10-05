@@ -528,6 +528,82 @@ export function calculateProfit(summary: ProductSummary, costConfig: DetailedCos
 }
 
 /**
+ * 归一化表头：去空格（含全角空格）、全角转半角、统一小写。
+ * 使「总花费（元）」与「总花费(元)」等价，抵御拼多多在空格、括号、全角、单位上的格式微调。
+ */
+function normalizeHeader(header: string): string {
+  return header
+    .replace(/[\s\u3000]+/g, '')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/％/g, '%')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .toLowerCase();
+}
+
+/**
+ * 同义词剔除：拼多多导出模板常在「营销/推广/广告」等修饰词上做增删，
+ * 归一化后再去掉这些同义词即可互相匹配（如「总营销花费」↔「总花费」）。
+ */
+const MARKETING_HEADER_SYNONYMS = /营销|推广|广告/g;
+
+function canonicalHeader(header: string): string {
+  return normalizeHeader(header).replace(MARKETING_HEADER_SYNONYMS, '');
+}
+
+/**
+ * 列名别名表：拼多多调整列名时，只需在此登记一次，解析逻辑无需改动。
+ * key 为代码中使用的列名，value 为其可能出现的其它写法。
+ */
+const MARKETING_FIELD_ALIASES: Record<string, string[]> = {
+  // 词序调整类改名
+  '实际净投产比': ['净实际投产比', '实际净推广投产比'],
+  '实际净推广投产比': ['净实际推广投产比', '净实际投产比'],
+};
+
+/**
+ * 构建「列名 → 下标」解析器。
+ * 依次尝试：精确匹配 → 别名匹配 → 忽略同义词/词序后的归一化匹配，
+ * 既兼容历史列名，也能自动适配拼多多后续的改名。
+ */
+function createMarketingHeaderResolver(headers: string[]) {
+  const exact = new Map<string, number>();
+  const canonical = new Map<string, number>();
+  headers.forEach((header, index) => {
+    const normalized = normalizeHeader(header);
+    if (!exact.has(normalized)) exact.set(normalized, index);
+    const canon = canonicalHeader(header);
+    if (!canonical.has(canon)) canonical.set(canon, index);
+  });
+
+  return (fieldName: string): number => {
+    const candidates = [fieldName, ...(MARKETING_FIELD_ALIASES[fieldName] || [])];
+    for (const name of candidates) {
+      const hit = exact.get(normalizeHeader(name));
+      if (hit !== undefined) return hit;
+    }
+    for (const name of candidates) {
+      const hit = canonical.get(canonicalHeader(name));
+      if (hit !== undefined) return hit;
+    }
+    return -1;
+  };
+}
+
+/**
+ * 判断某行是否为营销数据表头：
+ * 不绑定易变的「总营销花费」列名，只要同时存在 商品ID、日期 与任一「花费」列即可。
+ */
+function isMarketingHeaderLine(line: string): boolean {
+  const headers = parseCSVLine(line).map(canonicalHeader);
+  return (
+    headers.includes(canonicalHeader('商品ID')) &&
+    headers.includes(canonicalHeader('日期')) &&
+    headers.some(header => header.includes('花费'))
+  );
+}
+
+/**
  * 解析营销数据CSV（从Excel导出的CSV格式）
  */
 export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
@@ -537,15 +613,13 @@ export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
     return [];
   }
 
-  // 定位表头：Excel 导出的说明行可能位于表头前后
-  const headerIndex = lines.findIndex(line => {
-    const headers = parseCSVLine(line);
-    return headers.includes('商品ID') && headers.includes('总营销花费(元)');
-  });
+  // 定位表头：Excel 导出的说明行可能位于表头前后；识别逻辑不绑定具体列名，跨模板通用
+  const headerIndex = lines.findIndex(isMarketingHeaderLine);
   if (headerIndex < 0) {
     return [];
   }
   const headers = parseCSVLine(lines[headerIndex]);
+  const resolveIndex = createMarketingHeaderResolver(headers);
   
   // 解析数据行，并清理「全店托管」说明/合计行
   const data: MarketingDataRow[] = [];
@@ -560,56 +634,62 @@ export function parseMarketingCSV(csvText: string): MarketingDataRow[] {
     ) {
       continue;
     }
+
+    // 按列名解析当前行取值（兼容多种列名写法，缺失列返回空串）
+    const get = (fieldName: string): string => {
+      const index = resolveIndex(fieldName);
+      return index >= 0 && index < values.length ? values[index] : '';
+    };
     
     try {
       const row: MarketingDataRow = {
-        日期: getValue(values, headers, '日期'),
-        商品ID: getValue(values, headers, '商品ID'),
-        商品名称: getValue(values, headers, '商品名称'),
-        推广场景: getValue(values, headers, '推广场景'),
-        推广名称: getValue(values, headers, '推广名称'),
-        出价方式: getValue(values, headers, '出价方式'),
-        分组: getValue(values, headers, '分组'),
-        是否已删除: getValue(values, headers, '是否已删除'),
-        成交营销花费: toNumber(getValue(values, headers, '成交营销花费(元)')),
-        交易额: toNumber(getValue(values, headers, '交易额(元)')),
-        实际投产比: toNumber(getValue(values, headers, '实际投产比')),
-        总营销花费: toNumber(getValue(values, headers, '总营销花费(元)')),
-        推广成交花费: toNumber(getValue(values, headers, '推广成交花费(元)')),
-        结算券花费: toNumber(getValue(values, headers, '结算券花费(元)')),
-        推广总花费: toNumber(getValue(values, headers, '推广总花费(元)')),
-        净交易额: toNumber(getValue(values, headers, '净交易额(元)')),
-        实际净投产比: toNumber(getValue(values, headers, '实际净投产比')),
-        净成交笔数: parseInt(getValue(values, headers, '净成交笔数')) || 0,
-        每笔净成交花费: toNumber(getValue(values, headers, '每笔净成交花费(元)')),
-        退款豁免率: getValue(values, headers, '退款豁免率'),
-        退单豁免率: getValue(values, headers, '退单豁免率'),
-        净推广交易额: toNumber(getValue(values, headers, '净推广交易额(元)')),
-        净成交券金额: toNumber(getValue(values, headers, '净成交券金额(元)')),
-        实际净推广投产比: toNumber(getValue(values, headers, '实际净推广投产比')),
-        每笔净成交推广花费: toNumber(getValue(values, headers, '每笔净成交推广花费(元)')),
-        每笔结算成交花费: toNumber(getValue(values, headers, '每笔结算成交花费(元)')),
-        交易额结算率: getValue(values, headers, '交易额结算率'),
-        订单结算率: getValue(values, headers, '订单结算率'),
-        每笔结算成交金额: toNumber(getValue(values, headers, '每笔结算成交金额(元)')),
-        成交笔数: parseInt(getValue(values, headers, '成交笔数')) || 0,
-        每笔成交花费: toNumber(getValue(values, headers, '每笔成交花费(元)')),
-        每笔成交金额: toNumber(getValue(values, headers, '每笔成交金额(元)')),
-        直接交易额: toNumber(getValue(values, headers, '直接交易额(元)')),
-        间接交易额: toNumber(getValue(values, headers, '间接交易额(元)')),
-        直接成交笔数: parseInt(getValue(values, headers, '直接成交笔数')) || 0,
-        间接成交笔数: parseInt(getValue(values, headers, '间接成交笔数')) || 0,
-        曝光量: parseInt(getValue(values, headers, '曝光量').replace(/,/g, '')) || 0,
-        点击量: parseInt(getValue(values, headers, '点击量').replace(/,/g, '')) || 0,
-        询单花费: toNumber(getValue(values, headers, '询单花费(元)')),
-        询单量: parseInt(getValue(values, headers, '询单量')) || 0,
-        平均询单成本: toNumber(getValue(values, headers, '平均询单成本(元)')),
-        收藏花费: toNumber(getValue(values, headers, '收藏花费(元)')),
-        收藏量: parseInt(getValue(values, headers, '收藏量')) || 0,
-        平均收藏成本: toNumber(getValue(values, headers, '平均收藏成本(元)')),
-        关注花费: toNumber(getValue(values, headers, '关注花费(元)')),
-        关注量: parseInt(getValue(values, headers, '关注量')) || 0,
-        平均关注成本: toNumber(getValue(values, headers, '平均关注成本(元)')),
+        日期: get('日期'),
+        商品ID: get('商品ID'),
+        商品名称: get('商品名称'),
+        推广场景: get('推广场景'),
+        推广名称: get('推广名称'),
+        出价方式: get('出价方式'),
+        分组: get('分组'),
+        是否已删除: get('是否已删除'),
+        成交营销花费: toNumber(get('成交营销花费(元)')),
+        交易额: toNumber(get('交易额(元)')),
+        实际投产比: toNumber(get('实际投产比')),
+        总营销花费: toNumber(get('总营销花费(元)')),
+        推广成交花费: toNumber(get('推广成交花费(元)')),
+        结算券花费: toNumber(get('结算券花费(元)')),
+        推广总花费: toNumber(get('推广总花费(元)')),
+        净交易额: toNumber(get('净交易额(元)')),
+        实际净投产比: toNumber(get('实际净投产比')),
+        净成交笔数: parseInt(get('净成交笔数')) || 0,
+        每笔净成交花费: toNumber(get('每笔净成交花费(元)')),
+        退款豁免率: get('退款豁免率'),
+        退单豁免率: get('退单豁免率'),
+        净推广交易额: toNumber(get('净推广交易额(元)')),
+        净成交券金额: toNumber(get('净成交券金额(元)')),
+        实际净推广投产比: toNumber(get('实际净推广投产比')),
+        每笔净成交推广花费: toNumber(get('每笔净成交推广花费(元)')),
+        每笔结算成交花费: toNumber(get('每笔结算成交花费(元)')),
+        交易额结算率: get('交易额结算率'),
+        订单结算率: get('订单结算率'),
+        每笔结算成交金额: toNumber(get('每笔结算成交金额(元)')),
+        成交笔数: parseInt(get('成交笔数')) || 0,
+        每笔成交花费: toNumber(get('每笔成交花费(元)')),
+        每笔成交金额: toNumber(get('每笔成交金额(元)')),
+        直接交易额: toNumber(get('直接交易额(元)')),
+        间接交易额: toNumber(get('间接交易额(元)')),
+        直接成交笔数: parseInt(get('直接成交笔数')) || 0,
+        间接成交笔数: parseInt(get('间接成交笔数')) || 0,
+        曝光量: parseInt(get('曝光量').replace(/,/g, '')) || 0,
+        点击量: parseInt(get('点击量').replace(/,/g, '')) || 0,
+        询单花费: toNumber(get('询单花费(元)')),
+        询单量: parseInt(get('询单量')) || 0,
+        平均询单成本: toNumber(get('平均询单成本(元)')),
+        收藏花费: toNumber(get('收藏花费(元)')),
+        收藏量: parseInt(get('收藏量')) || 0,
+        平均收藏成本: toNumber(get('平均收藏成本(元)')),
+        关注花费: toNumber(get('关注花费(元)')),
+        关注量: parseInt(get('关注量')) || 0,
+        平均关注成本: toNumber(get('平均关注成本(元)')),
       };
       
       data.push(row);
