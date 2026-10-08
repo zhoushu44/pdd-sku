@@ -184,6 +184,22 @@ export default function Dashboard() {
     saveCostConfig(newCostConfig);
   }, []);
 
+  // 定价默认取导入销售数据的平均客单价：仅对未设置定价的规格自动预填，不覆盖用户已填值
+  useEffect(() => {
+    if (filteredSummaries.length === 0) return;
+    let changed = false;
+    const nextConfig: DetailedCostConfig = { ...costConfig };
+    for (const item of filteredSummaries) {
+      const current = nextConfig[item.规格];
+      const currentPrice = current?.定价 || 0;
+      if (currentPrice === 0 && item.平均客单价 > 0) {
+        nextConfig[item.规格] = { 成本单价: 0, ...current, 定价: item.平均客单价 };
+        changed = true;
+      }
+    }
+    if (changed) handleCostChange(nextConfig);
+  }, [filteredSummaries, costConfig, handleCostChange]);
+
   // 处理销售数据文件上传（合并去重 + 持久化）
   const handleSalesFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

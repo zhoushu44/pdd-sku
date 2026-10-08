@@ -252,6 +252,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
     订单数: number;       // 有效订单数
     商品名称: string;
     商品ID: string;
+    样式ID: string;       // SKU ID（规格级ID）
     退款成功额: number;   // 退款成功订单的商家实收金额
     发货后退款额: number; // 发货后退款成功的商家实收金额（用于计算运费损失）
     总订单数: number;     // 含退款的全部订单数
@@ -265,12 +266,16 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
       订单数: 0,
       商品名称: order.商品,
       商品ID: order.商品id,
+      样式ID: order.样式ID,
       退款成功额: 0,
       发货后退款额: 0,
       总订单数: 0,
     };
 
     existing.总订单数 += 1;
+
+    // 同一规格的 SKU ID 应一致，取首个非空值
+    if (!existing.样式ID && order.样式ID) existing.样式ID = order.样式ID;
 
     if (isValidOrder(order)) {
       existing.销售额 += order.商家实收金额;
@@ -301,6 +306,7 @@ export function groupBySpec(orders: OrderData[]): ProductSummary[] {
     const summary: ProductSummary = {
       规格: spec,
       商品ID: data.商品ID,
+      样式ID: data.样式ID,
       商品名称: data.商品名称,
       销售额: Math.round(data.销售额 * 100) / 100,
       销量: data.销量,
@@ -1861,7 +1867,12 @@ const PLATFORM_FEE_RATE = 0.006;
  * - 实际毛利率 = 单品毛利 ÷ 净销售额 × 100
  * - 实际ROI = 净销售额 ÷ 分摊推广费
  * - 实际保ROI = 净销售额 ÷ (单品利润 + 分摊推广费)
- * - 判定：实际ROI 低于保本线 → 停推广；保本线到 1.2 倍 → 降预算；1.2 倍以上 → 可放大
+ * - 判定（单品维度）：实际ROI 低于保本线 → 停推广；保本线到 1.2 倍 → 降预算；1.2 倍以上 → 可放大
+ * - 判定（SKU 维度）：盈利×动销组合矩阵——
+ *   盈利分级（全店分位，仅已配置成本且有销量的 SKU 参与排名）：单品利润<0 → 亏损；利润率<P25 → 偏低；P25~P75 → 正常；≥P75 → 优质；未配置成本 → 未配置
+ *   动销分级（同商品ID内按销量占比）：占比≥40%或Top1且≥20% → 主力；占比<5%且非零 → 滞销；销量=0 → 零销；其余 → 动销
+ *   组合：优质×主力→明星款；优质×动销→潜力款；优质×滞销→提曝光；正常×主力→现金牛；正常×动销→维持；
+ *         偏低×主力→降本提价；偏低×滞销→精简；亏损×主力→止损；亏损×其余有销量→清仓；零销→清退；未配置成本→未配置
  *
  * @param summaries 商品汇总（含销售额/退款金额/销量/订单数）
  * @param marketingData 营销数据（按商品ID汇总推广花费）
@@ -1897,16 +1908,19 @@ export function calculateSkuDetail(
     销售额: number;
     退款金额: number;
     订单数: number;
+    销量: number;
     商品成本: number;
     快递费: number;
     运费险: number;
     补偿: number;
+    已配置成本: boolean;
   }
 
   const buckets = new Map<string, Bucket>();
   summaries.forEach(s => {
     const isSku = dimension === 'sku';
     const key = isSku ? `sku:${s.规格}` : `product:${s.商品ID || s.商品名称 || s.规格}`;
+    const hasCfg = !!costConfig[s.规格];
     const cfg: CostItem = costConfig[s.规格] || { 成本单价: 0 };
     const 件数 = s.销量 || 0;
 
@@ -1916,19 +1930,23 @@ export function calculateSkuDetail(
       销售额: 0,
       退款金额: 0,
       订单数: 0,
+      销量: 0,
       商品成本: 0,
       快递费: 0,
       运费险: 0,
       补偿: 0,
+      已配置成本: hasCfg,
     };
 
     bucket.销售额 += s.销售额 || 0;
     bucket.退款金额 += s.退款金额 || 0;
     bucket.订单数 += s.订单数 || 0;
+    bucket.销量 += 件数;
     bucket.商品成本 += (cfg.成本单价 || 0) * 件数;
     bucket.快递费 += (cfg.启用快递费 ? (cfg.快递费 || 0) : 0) * 件数;
     bucket.运费险 += (cfg.启用运费险 ? (cfg.运费险 || 0) : 0) * 件数;
     bucket.补偿 += cfg.补偿 || 0;
+    bucket.已配置成本 = bucket.已配置成本 && hasCfg;
 
     buckets.set(key, bucket);
   });
@@ -1953,21 +1971,34 @@ export function calculateSkuDetail(
     const 实际毛利率 = 净销售额 > 0 ? (单品毛利 / 净销售额) * 100 : 0;
 
     const 扣点 = 销售额 * PLATFORM_FEE_RATE;
-    const 单品利润 = 单品毛利 - bucket.快递费 - bucket.运费险 - 扣点 - 推广费 - bucket.补偿;
+    // 单品利润（含推广费口径）：单品毛利 - 快递费 - 运费险 - 扣点 - 分摊推广费 - 补偿
+    const 利润含推广 = 单品毛利 - bucket.快递费 - bucket.运费险 - 扣点 - 推广费 - bucket.补偿;
+    // SKU 维度推广费为按销售额分摊值，不参与盈亏，仅保留纯成本利润；单品维度计入推广费
+    const 单品利润 = dimension === 'sku' ? 利润含推广 + 推广费 : 利润含推广;
 
     const 实际ROI = 推广费 > 0 ? 净销售额 / 推广费 : 0;
-    const 保本分母 = 单品利润 + 推广费;
+    const 保本分母 = 利润含推广 + 推广费;
     const 实际保ROI = 保本分母 > 0 ? 净销售额 / 保本分母 : 0;
 
+    // 判定：单品维度在此直接计算推广决策；SKU 维度需全集分位数，循环后统一计算
     let 判定: SkuVerdict;
-    if (推广费 <= 0) {
-      判定 = '无推广';
-    } else if (实际ROI < 实际保ROI) {
-      判定 = '停推广';
-    } else if (实际ROI < 实际保ROI * 1.2) {
-      判定 = '降预算';
+    let 判定依据 = '';
+    if (dimension === 'product') {
+      if (推广费 <= 0) {
+        判定 = '无推广';
+        判定依据 = '无推广花费，不参与推广决策';
+      } else if (实际ROI < 实际保ROI) {
+        判定 = '停推广';
+        判定依据 = `实际ROI ${实际ROI.toFixed(2)} < 保本ROI ${实际保ROI.toFixed(2)}，低于保本线`;
+      } else if (实际ROI < 实际保ROI * 1.2) {
+        判定 = '降预算';
+        判定依据 = `实际ROI ${实际ROI.toFixed(2)} 在保本ROI ${实际保ROI.toFixed(2)}~${(实际保ROI * 1.2).toFixed(2)} 之间`;
+      } else {
+        判定 = '可放大';
+        判定依据 = `实际ROI ${实际ROI.toFixed(2)} ≥ 1.2×保本ROI ${(实际保ROI * 1.2).toFixed(2)}`;
+      }
     } else {
-      判定 = '可放大';
+      判定 = '未配置'; // SKU 维度占位，循环后统一覆盖
     }
 
     rows.push({
@@ -1981,14 +2012,111 @@ export function calculateSkuDetail(
       推广费: round2(推广费),
       净推广占比: round2(净推广占比),
       补偿: round2(bucket.补偿),
+      成本: round2(bucket.商品成本),
       单品毛利: round2(单品毛利),
       实际毛利率: round2(实际毛利率),
       单品利润: round2(单品利润),
       实际保ROI: round2(实际保ROI),
       实际ROI: round2(实际ROI),
       判定,
-    });
+      判定依据,
+      // SKU 维度判定所需中间量
+      ...(dimension === 'sku' ? { 销量: bucket.销量, 已配置成本: bucket.已配置成本 } : {}),
+    } as SkuDetailRow);
   });
+
+  // ===== SKU 维度：盈利×动销组合判定（两阶段） =====
+  if (dimension === 'sku') {
+    // 阶段一：盈利分级（全店利润率分位，仅已配置成本且有销量的 SKU 参与排名）
+    const 可排名 = rows.filter(r => (r as any).已配置成本 && r.订单数 > 0 && r.销售额 - r.退款金额 > 0);
+    const 利润率列表 = 可排名
+      .map(r => (r.销售额 - r.退款金额) > 0 ? r.单品利润 / (r.销售额 - r.退款金额) : 0)
+      .sort((a, b) => a - b);
+    const 分位 = (p: number) => {
+      if (利润率列表.length === 0) return 0;
+      const idx = (利润率列表.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      return 利润率列表[lo] + (利润率列表[hi] - 利润率列表[lo]) * (idx - lo);
+    };
+    const P25 = 分位(0.25);
+    const P75 = 分位(0.75);
+
+    // 阶段二：动销分级（同商品ID内按销量占比）+ 组合
+    const 销量By商品 = new Map<string, number>();
+    const Top1By商品 = new Map<string, { 款号: string; 销量: number }>();
+    rows.forEach(r => {
+      const 销量 = (r as any).销量 || 0;
+      销量By商品.set(r.商品ID, (销量By商品.get(r.商品ID) || 0) + 销量);
+      const curTop1 = Top1By商品.get(r.商品ID);
+      if (!curTop1 || 销量 > curTop1.销量) {
+        Top1By商品.set(r.商品ID, { 款号: r.款号, 销量 });
+      }
+    });
+
+    rows.forEach(r => {
+      const 净销售额 = r.销售额 - r.退款金额;
+      const 销量 = (r as any).销量 || 0;
+      const 已配置成本 = (r as any).已配置成本 as boolean;
+
+      // 盈利分级
+      let 盈利: string;
+      if (!已配置成本) {
+        盈利 = '未配置';
+      } else if (r.订单数 <= 0 || 净销售额 <= 0) {
+        盈利 = '无销量';
+      } else if (r.单品利润 < 0) {
+        盈利 = '亏损';
+      } else {
+        const 利润率 = r.单品利润 / 净销售额;
+        盈利 = 利润率 < P25 ? '偏低' : 利润率 < P75 ? '正常' : '优质';
+      }
+
+      // 动销分级（同商品ID内）
+      const 商品销量 = 销量By商品.get(r.商品ID) || 0;
+      const 占比 = 商品销量 > 0 ? 销量 / 商品销量 : 0;
+      const isTop1 = Top1By商品.get(r.商品ID)?.款号 === r.款号;
+      let 动销: string;
+      if (销量 <= 0) {
+        动销 = '零销';
+      } else if (占比 >= 0.4 || (isTop1 && 占比 >= 0.2)) {
+        动销 = '主力';
+      } else if (占比 < 0.05) {
+        动销 = '滞销';
+      } else {
+        动销 = '动销';
+      }
+
+      // 组合判定
+      let 判定: SkuVerdict;
+      let 判定依据: string;
+      if (盈利 === '未配置') {
+        判定 = '未配置';
+        判定依据 = '未在成本配置中填写该规格，无法计算利润，请先补录成本';
+      } else if (动销 === '零销') {
+        判定 = '清退';
+        判定依据 = '统计期内零销量（占坑未出单），建议清退或优化链接';
+      } else if (盈利 === '亏损') {
+        判定 = 动销 === '主力' ? '止损' : '清仓';
+        判定依据 = `单品利润 ${r.单品利润.toFixed(2)} < 0${动销 === '主力' ? '，且为商品内主力款，卖越多亏越多' : '，建议尽快清仓'}（不含分摊推广费）`;
+      } else {
+        const 利润率显示 = ((r.单品利润 / 净销售额) * 100).toFixed(1);
+        const 档位说明 = `利润率 ${利润率显示}%（全店${盈利}：P25=${(P25 * 100).toFixed(1)}%，P75=${(P75 * 100).toFixed(1)}%），商品内销量占比 ${(占比 * 100).toFixed(1)}%（${动销}）`;
+        const 组合表: Record<string, SkuVerdict> = {
+          '优质-主力': '明星款', '优质-动销': '潜力款', '优质-滞销': '提曝光',
+          '正常-主力': '现金牛', '正常-动销': '维持', '正常-滞销': '观察',
+          '偏低-主力': '降本提价', '偏低-动销': '观察', '偏低-滞销': '精简',
+        };
+        判定 = 组合表[`${盈利}-${动销}`] ?? '观察';
+        判定依据 = 档位说明;
+      }
+
+      r.判定 = 判定;
+      r.判定依据 = 判定依据;
+      delete (r as any).销量;
+      delete (r as any).已配置成本;
+    });
+  }
 
   rows.sort((a, b) => b.销售额 - a.销售额);
 

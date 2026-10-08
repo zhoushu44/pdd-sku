@@ -28,7 +28,8 @@ export interface OrderData {
 // 商品规格汇总
 export interface ProductSummary {
   规格: string;
-  商品ID: string;        // 商品ID
+  商品ID: string;        // 商品ID（宝贝ID）
+  样式ID?: string;       // SKU ID（规格级ID）
   商品名称: string;
   销售额: number;        // 商家实收总额
   销量: number;          // 商品数量总和
@@ -321,8 +322,11 @@ export interface AIApplyPayload {
 // 单品明细维度：sku=按规格明细，product=按商品ID汇总
 export type SkuDetailDimension = 'sku' | 'product';
 
-// 推广决策判定
-export type SkuVerdict = '停推广' | '降预算' | '可放大' | '无推广';
+// 判定：单品维度=推广决策（停推广/降预算/可放大/无推广），SKU 维度=盈利×动销组合判定（盈利=全店利润率分位，动销=商品内销量占比）
+export type SkuVerdict =
+  | '停推广' | '降预算' | '可放大' | '无推广'
+  | '明星款' | '潜力款' | '提曝光' | '现金牛' | '维持' | '观察'
+  | '降本提价' | '精简' | '止损' | '清仓' | '清退' | '未配置';
 
 // 单品明细行（按款/规格维度）
 export interface SkuDetailRow {
@@ -336,12 +340,14 @@ export interface SkuDetailRow {
   推广费: number;        // 分摊推广费
   净推广占比: number;    // 分摊推广费 ÷ 净销售额 × 100
   补偿: number;          // 该款补偿
-  单品毛利: number;      // 净销售额 - 商品成本
+  成本: number;          // 商品成本（成本单价 × 销量）
+  单品毛利: number;      // 净销售额 - 成本
   实际毛利率: number;    // 单品毛利 ÷ 净销售额 × 100
   单品利润: number;      // 单品毛利 - 快递 - 运费险 - 扣点 - 分摊推广费 - 补偿
   实际保ROI: number;     // 净销售额 ÷ (单品利润 + 分摊推广费)
   实际ROI: number;       // 净销售额 ÷ 分摊推广费
   判定: SkuVerdict;
+  判定依据: string;       // 判定规则的文字说明（悬浮提示用）
 }
 
 // 单品明细汇总（表头统计）

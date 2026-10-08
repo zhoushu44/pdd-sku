@@ -40,6 +40,7 @@ import type { OrderData, ProductSummary, DetailedCostConfig, PeriodComparison, M
 import { formatAmount, formatNumber } from '../lib/utils';
 import MiniLineChart from './MiniLineChart';
 import ProductInsights from './ProductInsights';
+import ProfitFunnelDiagnosis from './ProfitFunnelDiagnosis';
 import {
   groupByProduct,
   median,
@@ -649,6 +650,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
         />
       )}
 
+      {/* 利润漏斗诊断：展现×CTR×CVR×客单价×(1-退款率)-成本-推广；四象散点（点=SKU/单品），悬停看商品ID，点击展开六维雷达 */}
+      <ProfitFunnelDiagnosis summaries={activeSummaries} marketingData={marketingData} dimension={dimension} />
+
       {/* 关键预警区 */}
       {(alerts.lossSkus.length > 0 || alerts.decliningSkus.length > 0 || alerts.lowProfitHighVolume.length > 0) && (
         <div className="bg-white rounded-xl p-5 border border-slate-200">
@@ -696,10 +700,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 
       {/* 经营健康度卡片 */}
       <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <ShoppingCart className="w-6 h-6 text-blue-600" />
-          <h2 className="text-base font-bold text-slate-900">经营健康度</h2>
-        </div>
+        <h2 className="text-base font-bold text-slate-900 mb-6">经营健康度</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-4">
           {metrics.map((metric) => {
             const Icon = metric.icon;
@@ -922,6 +923,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                     <tr className="border-b border-amber-200 bg-amber-50">
                       <th className="px-4 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
                       <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
                       <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">销量</th>
                       <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">净利润</th>
                       <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
@@ -935,6 +937,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-right font-mono text-slate-700">
                           {formatAmount(item.销售额)}
+                        </td>
+                        <td className="px-4 py-2.5 text-[13px] text-right font-mono text-orange-600">
+                          {formatAmount(item.总成本)}
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-right font-mono text-slate-700">
                           {formatNumber(item.销量)}
@@ -1274,6 +1279,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 <tr className="border-b border-slate-200 bg-slate-100">
                   <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
@@ -1287,6 +1293,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
+                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.总成本)}
+                      </td>
                       <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         +{item.利润率.toFixed(2)}%
                       </td>
@@ -1294,7 +1303,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={4} className="py-8 text-center text-slate-400 text-[13px]">
                       暂无爆品
                     </td>
                   </tr>
@@ -1319,6 +1328,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 <tr className="border-b border-slate-200 bg-slate-100">
                   <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
@@ -1332,6 +1342,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
+                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.总成本)}
+                      </td>
                       <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         {item.利润率.toFixed(2)}%
                       </td>
@@ -1339,7 +1352,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={4} className="py-8 text-center text-slate-400 text-[13px]">
                       暂无风险品
                     </td>
                   </tr>
@@ -1364,6 +1377,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 <tr className="border-b border-slate-200 bg-slate-100">
                   <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
                   <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
@@ -1377,6 +1391,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
+                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.总成本)}
+                      </td>
                       <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         +{item.利润率.toFixed(2)}%
                       </td>
@@ -1384,7 +1401,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={4} className="py-8 text-center text-slate-400 text-[13px]">
                       暂无衰退品
                     </td>
                   </tr>
@@ -1415,6 +1432,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   销售额
                 </th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                  成本
+                </th>
+                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
                   销量
                 </th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
@@ -1441,6 +1461,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                     <td className="px-4 py-3 text-[13px] text-emerald-600 text-right font-mono">
                       {formatAmount(item.summary.销售额)}
                     </td>
+                    <td className="px-4 py-3 text-[13px] text-orange-600 text-right font-mono">
+                      {formatAmount(item.summary.总成本)}
+                    </td>
                     <td className="px-4 py-3 text-[13px] text-slate-700 text-right font-mono">
                       {formatNumber(item.summary.销量)}
                     </td>
@@ -1465,7 +1488,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-[13px]">
                     暂无数据
                   </td>
                 </tr>
@@ -1491,6 +1514,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">排名</th>
                   <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销量</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">订单数</th>
                 </tr>
@@ -1518,6 +1542,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       <td className="px-3 py-3 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
+                      <td className="px-3 py-3 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.总成本)}
+                      </td>
                       <td className="px-3 py-3 text-[13px] text-slate-700 text-right font-mono">
                         {formatNumber(item.销量)}
                       </td>
@@ -1528,7 +1555,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
                       暂无数据
                     </td>
                   </tr>
@@ -1552,6 +1579,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">排名</th>
                   <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">净利润</th>
                   <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
@@ -1579,6 +1607,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       <td className="px-3 py-3 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
+                      <td className="px-3 py-3 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.总成本)}
+                      </td>
                       <td className={`px-3 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.净利润)}`}>
                         {item.净利润 >= 0 ? '+' : ''}
                         {formatAmount(item.净利润)}
@@ -1591,7 +1622,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
                       暂无数据
                     </td>
                   </tr>
@@ -1674,6 +1705,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
               <tr className="border-b border-slate-200 bg-slate-100">
                 <th className="px-4 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">当前利润</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">涨1%后利润</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">涨3%后利润</th>
@@ -1697,6 +1729,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                       </td>
                       <td className="px-4 py-3 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.summary.销售额)}
+                      </td>
+                      <td className="px-4 py-3 text-[13px] text-orange-600 text-right font-mono">
+                        {formatAmount(item.summary.总成本)}
                       </td>
                       <td className={`px-4 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.summary.净利润)}`}>
                         {item.summary.净利润 >= 0 ? '+' : ''}
@@ -1732,7 +1767,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400 text-[13px]">
+                  <td colSpan={10} className="py-8 text-center text-slate-400 text-[13px]">
                     暂无数据
                   </td>
                 </tr>

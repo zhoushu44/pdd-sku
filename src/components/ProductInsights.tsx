@@ -12,12 +12,24 @@ interface ProductInsightsProps {
   orders: OrderData[];
 }
 
-// 判定徽章样式（深色主题实底，与单品明细一致）
+// 判定徽章样式（深色主题实底，与单品明细一致；本组件仅使用单品维度推广判定，其余键为类型完整性补充）
 const verdictClass: Record<SkuVerdict, string> = {
   停推广: 'bg-red-500 text-white',
   降预算: 'bg-amber-500 text-white',
   可放大: 'bg-emerald-500 text-white',
   无推广: 'bg-slate-200 text-slate-600',
+  明星款: 'bg-emerald-500 text-white',
+  潜力款: 'bg-teal-500 text-white',
+  提曝光: 'bg-cyan-500 text-white',
+  现金牛: 'bg-sky-500 text-white',
+  维持: 'bg-slate-300 text-slate-700',
+  观察: 'bg-slate-200 text-slate-600',
+  降本提价: 'bg-amber-500 text-white',
+  精简: 'bg-orange-500 text-white',
+  止损: 'bg-red-600 text-white',
+  清仓: 'bg-red-500 text-white',
+  清退: 'bg-slate-400 text-white',
+  未配置: 'bg-slate-100 text-slate-400 border border-slate-300',
 };
 
 /**

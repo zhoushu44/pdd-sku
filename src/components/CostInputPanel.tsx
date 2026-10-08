@@ -19,6 +19,7 @@ import {
   ArrowDown,
   Sparkles,
   CircleHelp,
+  Search,
 } from 'lucide-react';
 import { ProductSummary, DetailedCostConfig, CostItem, AIApplyPayload } from '../types';
 import AIPanel from './AIPanel';
@@ -71,6 +72,8 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
   const [showAIPanel, setShowAIPanel] = useState(false);
   // 填写状态筛选：all 全部 / filled 已填 / unfilled 未填
   const [fillFilter, setFillFilter] = useState<'all' | 'filled' | 'unfilled'>('all');
+  // 搜索关键字：匹配 SKU ID / 宝贝ID / 规格名称（模糊）
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // 合并原始 productSummaries 和导入的 extraSummaries
   const allSummaries = useMemo(() => {
@@ -168,13 +171,24 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
     return { all: allSummaries.length, filled, unfilled: allSummaries.length - filled };
   }, [allSummaries, costConfig]);
 
-  // 获取排序后的商品列表（先按填写状态筛选，再排序）
+  // 搜索关键字（去空格 + 小写，空字符串表示不筛选）
+  const keyword = searchKeyword.trim().toLowerCase();
+
+  // 获取排序后的商品列表（先按搜索关键字、填写状态筛选，再排序）
   const getSortedSummaries = useCallback(() => {
-    const filtered = fillFilter === 'all'
+    let filtered = fillFilter === 'all'
       ? allSummaries
       : allSummaries.filter(s =>
           fillFilter === 'filled' ? Boolean(costConfig[s.规格]?.成本单价) : !costConfig[s.规格]?.成本单价
         );
+
+    if (keyword) {
+      filtered = filtered.filter(s =>
+        s.规格.toLowerCase().includes(keyword) ||
+        (s.商品ID || '').toLowerCase().includes(keyword) ||
+        (s.样式ID || '').toLowerCase().includes(keyword)
+      );
+    }
 
     if (!sortField) return filtered;
 
@@ -196,7 +210,7 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
 
       return sortDirection === 'asc' ? valueA - valueB : valueB - valueA;
     });
-  }, [allSummaries, sortField, sortDirection, calculateProfit, fillFilter, costConfig]);
+  }, [allSummaries, sortField, sortDirection, calculateProfit, fillFilter, costConfig, keyword]);
 
   // 保存并关闭编辑
   const saveAndClose = useCallback(() => {
@@ -487,6 +501,32 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
       <div className="p-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4 flex-wrap">
           <h3 className="text-base font-bold text-slate-900">成本配置</h3>
+          {/* 搜索：SKU ID / 宝贝ID / 规格名称（模糊） */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              placeholder="搜索 SKU ID / 宝贝ID / 规格名称"
+              className="pl-8 pr-7 py-1.5 bg-white border border-slate-300 rounded-lg text-[13px] text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 w-64"
+            />
+            {searchKeyword && (
+              <button
+                type="button"
+                onClick={() => setSearchKeyword('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title="清除搜索"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {keyword && (
+            <span className="text-[13px] text-slate-500">
+              匹配 <strong className="text-slate-900">{sortedSummaries.length}</strong> 条
+            </span>
+          )}
           {/* 填写状态筛选：全部 / 已填 / 未填 */}
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5">
             {([
@@ -698,9 +738,13 @@ export const CostInputPanel: React.FC<CostInputPanelProps> = ({
             {sortedSummaries.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-slate-400 text-[13px]">
-                  {fillFilter === 'filled' && '暂无已填成本的规格'}
-                  {fillFilter === 'unfilled' && '太棒了，所有规格的成本都已填写'}
-                  {fillFilter === 'all' && '暂无数据，点击右上角「批量导入」或「一键 AI」添加'}
+                  {keyword
+                    ? '未找到匹配的规格，请尝试其他关键词'
+                    : fillFilter === 'filled'
+                    ? '暂无已填成本的规格'
+                    : fillFilter === 'unfilled'
+                    ? '太棒了，所有规格的成本都已填写'
+                    : '暂无数据，点击右上角「批量导入」或「一键 AI」添加'}
                 </td>
               </tr>
             )}

@@ -17,6 +17,8 @@ interface MarketingGroupStat {
   cost: number;
   netTransaction: number;
   orders: number;
+  impressions: number;
+  clicks: number;
 }
 
 const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, summaries = [] }) => {
@@ -66,14 +68,18 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
     const totalTransactionAmount = filteredData.reduce((sum, item) => sum + item.交易额, 0);
     const totalNetTransaction = filteredData.reduce((sum, item) => sum + item.净交易额, 0);
     const totalNetOrders = filteredData.reduce((sum, item) => sum + item.净成交笔数, 0);
+    const totalOrders = filteredData.reduce((sum, item) => sum + item.成交笔数, 0);
     const totalImpressions = filteredData.reduce((sum, item) => sum + item.曝光量, 0);
     const totalClicks = filteredData.reduce((sum, item) => sum + item.点击量, 0);
 
     // 实际投产比
     const actualROI = totalMarketingCost > 0 ? totalTransactionAmount / totalMarketingCost : 0;
 
-    // 点击率
+    // 点击率（整体均值：总点击 ÷ 总曝光）
     const clickRate = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+
+    // 成交转化率（整体均值：总成交笔数 ÷ 总点击）
+    const conversionRate = totalClicks > 0 ? (totalOrders / totalClicks) * 100 : 0;
 
     return {
       totalMarketingCost,
@@ -83,7 +89,8 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
       totalImpressions,
       totalClicks,
       actualROI,
-      clickRate
+      clickRate,
+      conversionRate
     };
   }, [filteredData]);
 
@@ -295,6 +302,30 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
           </div>
           <div className="text-[13px] text-slate-500">净成交笔数</div>
         </div>
+
+        {/* 点击率（整体均值） */}
+        <div className="bg-gradient-to-br from-indigo-500/10 to-violet-500/10 rounded-xl p-5 border border-indigo-500/20">
+          <div className="flex items-center justify-between mb-3">
+            <MousePointerClick className="w-8 h-8 text-indigo-600" />
+            <span className="text-[13px] text-indigo-600 bg-indigo-500/20 px-2 py-1 rounded">CTR</span>
+          </div>
+          <div className="text-base font-bold text-slate-900 mb-1">
+            {summary.clickRate.toFixed(2)}%
+          </div>
+          <div className="text-[13px] text-slate-500">点击率（总点击÷总曝光）</div>
+        </div>
+
+        {/* 成交转化率（整体均值） */}
+        <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-xl p-5 border border-violet-500/20">
+          <div className="flex items-center justify-between mb-3">
+            <Target className="w-8 h-8 text-violet-600" />
+            <span className="text-[13px] text-violet-600 bg-violet-500/20 px-2 py-1 rounded">CVR</span>
+          </div>
+          <div className="text-base font-bold text-slate-900 mb-1">
+            {summary.conversionRate.toFixed(2)}%
+          </div>
+          <div className="text-[13px] text-slate-500">转化率（总成交÷总点击）</div>
+        </div>
       </div>
 
       {/* 额外指标 */}
@@ -306,7 +337,7 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
           </div>
           <div className="text-base font-semibold text-slate-900">{formatNumber(summary.totalImpressions)}</div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="flex items-center gap-2 mb-2">
             <MousePointerClick className="w-4 h-4 text-emerald-600" />
@@ -314,13 +345,15 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
           </div>
           <div className="text-base font-semibold text-slate-900">{formatNumber(summary.totalClicks)}</div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="flex items-center gap-2 mb-2">
-            <MousePointerClick className="w-4 h-4 text-emerald-600" />
-            <span className="text-[13px] text-slate-500">点击率</span>
+            <Target className="w-4 h-4 text-indigo-600" />
+            <span className="text-[13px] text-slate-500">全链路转化率（曝光→成交）</span>
           </div>
-          <div className="text-base font-semibold text-slate-900">{summary.clickRate.toFixed(2)}%</div>
+          <div className="text-base font-semibold text-slate-900">
+            {summary.totalImpressions > 0 ? ((summary.totalNetOrders / summary.totalImpressions) * 100).toFixed(2) : '0.00'}%
+          </div>
         </div>
       </div>
 
@@ -471,7 +504,10 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">营销花费</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">净交易额</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">成交笔数</th>
+                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">点击率</th>
+                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">转化率</th>
                 <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">投产比</th>
+                <th className="px-4 py-3 text-center text-[13px] font-medium text-slate-500">诊断</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -487,17 +523,40 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
                       transaction: 0,
                       cost: 0,
                       netTransaction: 0,
-                      orders: 0
+                      orders: 0,
+                      impressions: 0,
+                      clicks: 0
                     };
                   }
                   acc[key].transaction += row.交易额;
                   acc[key].cost += row.总营销花费;
                   acc[key].netTransaction += row.净交易额;
                   acc[key].orders += row.成交笔数;
+                  acc[key].impressions += row.曝光量;
+                  acc[key].clicks += row.点击量;
                   return acc;
                 }, {} as Record<string, MarketingGroupStat>)
               ).map(([key, data]) => {
                 const roi = data.cost > 0 ? data.transaction / data.cost : 0;
+                // CTR/CVR：点击率=点击÷曝光；转化率=成交÷点击（点击→成交）
+                const ctr = data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0;
+                const cvr = data.clicks > 0 ? (data.orders / data.clicks) * 100 : 0;
+                // 诊断：与整体均值对比（±20% 内视为达标）
+                const ctrVsAvg = summary.clickRate > 0 ? (ctr / summary.clickRate - 1) * 100 : 0;
+                const cvrVsAvg = summary.conversionRate > 0 ? (cvr / summary.conversionRate - 1) * 100 : 0;
+                let diagnosis = '';
+                let diagClass = '';
+                if (ctrVsAvg < -20 && cvrVsAvg < -20) {
+                  diagnosis = '素材与承接页都弱'; diagClass = 'bg-red-100 text-red-600';
+                } else if (ctrVsAvg < -20) {
+                  diagnosis = '点击率低·换素材/主图'; diagClass = 'bg-orange-100 text-orange-600';
+                } else if (cvrVsAvg < -20) {
+                  diagnosis = '转化率低·优化详情/价格'; diagClass = 'bg-amber-100 text-amber-600';
+                } else if (ctrVsAvg > 20 && cvrVsAvg > 20) {
+                  diagnosis = '双优·可放量'; diagClass = 'bg-emerald-100 text-emerald-600';
+                } else {
+                  diagnosis = '达标'; diagClass = 'bg-slate-100 text-slate-600';
+                }
 
                 return (
                   <tr key={key} className="hover:bg-slate-50 transition-colors">
@@ -510,8 +569,19 @@ const MarketingAnalysis: React.FC<MarketingAnalysisProps> = ({ marketingData, su
                     <td className="px-4 py-3 text-[13px] text-red-600 text-right font-mono">{formatAmount(data.cost)}</td>
                     <td className="px-4 py-3 text-[13px] text-cyan-600 text-right font-mono">{formatAmount(data.netTransaction)}</td>
                     <td className="px-4 py-3 text-[13px] text-slate-900 text-right">{data.orders}</td>
+                    <td className={`px-4 py-3 text-[13px] text-right font-mono ${ctr < summary.clickRate * 0.8 ? 'text-orange-600' : 'text-slate-600'}`}>
+                      {ctr.toFixed(2)}%
+                    </td>
+                    <td className={`px-4 py-3 text-[13px] text-right font-mono ${cvr < summary.conversionRate * 0.8 ? 'text-amber-600' : 'text-slate-600'}`}>
+                      {cvr.toFixed(2)}%
+                    </td>
                     <td className={`px-4 py-3 text-[13px] text-right font-mono ${roi >= 4 ? 'text-emerald-600' : roi >= 2 ? 'text-amber-600' : 'text-red-600'}`}>
                       {roi.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[13px] font-medium ${diagClass}`} title={`点击率较均值 ${ctrVsAvg >= 0 ? '+' : ''}${ctrVsAvg.toFixed(1)}%，转化率较均值 ${cvrVsAvg >= 0 ? '+' : ''}${cvrVsAvg.toFixed(1)}%`}>
+                        {diagnosis}
+                      </span>
                     </td>
                   </tr>
                 );
