@@ -40,7 +40,7 @@ jobs:
           images: ${{ secrets.DOCKER_HUB_USERNAME }}/trae-project
           tags: |
             # 版本号标签
-            type=raw,value=7.0
+            type=raw,value=8.0
             # 始终保留 latest 标签
             type=raw,value=latest
 

@@ -4,13 +4,18 @@
  *
  * 传输：Streamable HTTP（POST /mcp + GET /mcp SSE），零依赖、单文件。
  * 数据：与前端共用同一份持久化 JSON（容器内 /data、本地 ./.data）
- *       —— /data/cost.json     成本配置（前端 /api/config/cost 同一文件）
- *       —— /data/orders.json   销售订单（用于派生 SKU 列表与退款率口径）
+ *       —— /data/cost        成本配置（前端 /api/config/cost 同一文件）
+ *       —— /data/orders      销售订单（用于派生 SKU 列表与退款率口径）
+ *       —— /data/marketing   营销推广数据（商品维度汇总与点击率/转化率）
+ *       —— /data/expressBill 快递对账账单（快递公司维度汇总）
  *
  * 工具：
- *   list_skus    列出全部 SKU（规格/商品ID/当前成本配置/销售汇总）
- *   get_cost     查询单个或多个规格的成本配置
- *   update_cost  修改成本配置（支持绝对值与相对增减，口语字段别名归一化）
+ *   list_skus         列出全部 SKU（规格/商品ID/当前成本配置/销售汇总）
+ *   get_cost          查询单个或多个规格的成本配置
+ *   update_cost       修改成本配置（支持绝对值与相对增减，口语字段别名归一化）
+ *   delete_cost       删除成本配置（按规格名移除条目）
+ *   list_marketing    营销推广数据汇总（整体均值 + 商品维度，点击率/转化率）
+ *   list_express_bill 快递账单汇总（整体 + 快递公司维度）
  */
 
 import http from 'node:http';
@@ -28,7 +33,7 @@ const PROTOCOL_VERSION = '2025-03-26';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ---------- 数据读写（与前端 /api/config/* 同一文件） ----------
-const FILES = { cost: 'cost.json', orders: 'orders.json', marketing: 'marketing.json' };
+const FILES = { cost: 'cost', orders: 'orders', marketing: 'marketing', expressBill: 'expressBill' };
 
 function readJson(name) {
   const file = path.join(DATA_DIR, FILES[name]);
@@ -149,6 +154,133 @@ function slimCost(item) {
     if (v !== undefined && v !== null && Number(v) !== 0) out[k] = Number(v);
   }
   return out;
+}
+
+// ---------- 通用数值工具 ----------
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function pct(a, b) { return b > 0 ? round2((a / b) * 100) : 0; }
+
+// ---------- 营销推广汇总（口径与前端 MarketingAnalysis 一致） ----------
+// 点击率 = 总点击 ÷ 总曝光；转化率 = 总成交 ÷ 总点击
+function summarizeMarketing(rows, filter = {}) {
+  const kw = String(filter['商品ID'] || '').trim();
+  const from = String(filter.dateFrom || '').trim();
+  const to = String(filter.dateTo || '').trim();
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => {
+    if (kw && !String(r?.['商品ID'] || '').includes(kw)) return false;
+    const d = String(r?.['日期'] || '');
+    if (from && d && d < from) return false;
+    if (to && d && d > to) return false;
+    return true;
+  });
+
+  const total = { 总营销花费: 0, 交易额: 0, 净交易额: 0, 成交笔数: 0, 净成交笔数: 0, 曝光量: 0, 点击量: 0, 询单量: 0, 收藏量: 0 };
+  const groups = new Map();
+  for (const r of list) {
+    for (const k of Object.keys(total)) total[k] += num(r?.[k]);
+    const gid = String(r?.['商品ID'] || '未指定ID');
+    const g = groups.get(gid) || { 商品ID: gid, 商品名称: '', 分组: '', 总营销花费: 0, 交易额: 0, 净交易额: 0, 成交笔数: 0, 曝光量: 0, 点击量: 0 };
+    for (const k of ['总营销花费', '交易额', '净交易额', '成交笔数', '曝光量', '点击量']) g[k] += num(r?.[k]);
+    if (!g.商品名称 && r?.['商品名称']) g.商品名称 = r['商品名称'];
+    if (!g.分组 && r?.['分组']) g.分组 = r['分组'];
+    groups.set(gid, g);
+  }
+
+  const summary = {
+    记录数: list.length,
+    总曝光量: total.曝光量,
+    总点击量: total.点击量,
+    总成交笔数: total.成交笔数,
+    总净成交笔数: total.净成交笔数,
+    总营销花费: round2(total.总营销花费),
+    总交易额: round2(total.交易额),
+    总净交易额: round2(total.净交易额),
+    点击率: pct(total.点击量, total.曝光量),
+    转化率: pct(total.成交笔数, total.点击量),
+    投产比: total.总营销花费 > 0 ? round2(total.交易额 / total.总营销花费) : 0,
+  };
+
+  const groupRows = [...groups.values()].map((g) => {
+    const ctr = pct(g.点击量, g.曝光量);
+    const cvr = pct(g.成交笔数, g.点击量);
+    const vsCtr = summary.点击率 > 0 ? round2((ctr / summary.点击率 - 1) * 100) : 0;
+    const vsCvr = summary.转化率 > 0 ? round2((cvr / summary.转化率 - 1) * 100) : 0;
+    let 诊断 = '达标';
+    if (vsCtr < -20 && vsCvr < -20) 诊断 = '素材与承接页都弱';
+    else if (vsCtr < -20) 诊断 = '点击率低·换素材/主图';
+    else if (vsCvr < -20) 诊断 = '转化率低·优化详情/价格';
+    else if (vsCtr > 20 && vsCvr > 20) 诊断 = '双优·可放量';
+    return {
+      商品ID: g.商品ID,
+      商品名称: g.商品名称 || g.商品ID,
+      分组: g.分组,
+      交易额: round2(g.交易额),
+      总营销花费: round2(g.总营销花费),
+      净交易额: round2(g.净交易额),
+      成交笔数: g.成交笔数,
+      曝光量: g.曝光量,
+      点击量: g.点击量,
+      点击率: ctr,
+      较均值_点击率: vsCtr,
+      转化率: cvr,
+      较均值_转化率: vsCvr,
+      投产比: g.总营销花费 > 0 ? round2(g.交易额 / g.总营销花费) : 0,
+      诊断,
+    };
+  }).sort((a, b) => b.曝光量 - a.曝光量);
+
+  return { summary, groups: groupRows };
+}
+
+// ---------- 快递账单汇总（口径与前端 ExpressBillAnalysis 一致，默认应付口径） ----------
+function summarizeExpressBill(records, filter = {}) {
+  const kw = String(filter['快递公司'] || '').trim();
+  const list = (Array.isArray(records) ? records : []).filter((r) => !kw || String(r?.['快递公司'] || '').includes(kw));
+
+  const total = { 运单数: 0, 总金额: 0, 总预付: 0, 总应付: 0, 总计费重量: 0 };
+  const groups = new Map();
+  for (const r of list) {
+    const amt = num(r?.['总金额']);
+    const pre = num(r?.['预付']);
+    const rawPay = r?.['应付'];
+    const pay = rawPay === undefined || rawPay === null || rawPay === '' ? amt + pre : num(rawPay);
+    const w = num(r?.['计费重量']);
+    total.运单数 += 1; total.总金额 += amt; total.总预付 += pre; total.总应付 += pay; total.总计费重量 += w;
+    const gid = String(r?.['快递公司'] || '未指定');
+    const g = groups.get(gid) || { 快递公司: gid, 运单数: 0, 总金额: 0, 总预付: 0, 总应付: 0, 总计费重量: 0 };
+    g.运单数 += 1; g.总金额 += amt; g.总预付 += pre; g.总应付 += pay; g.总计费重量 += w;
+    groups.set(gid, g);
+  }
+
+  const summary = {
+    总运单数: total.运单数,
+    总金额: round2(total.总金额),
+    总预付: round2(total.总预付),
+    总应付: round2(total.总应付),
+    总计费重量: round2(total.总计费重量),
+    平均单件应付: total.运单数 > 0 ? round2(total.总应付 / total.运单数) : 0,
+    平均单件面单: total.运单数 > 0 ? round2(total.总金额 / total.运单数) : 0,
+  };
+
+  const groupRows = [...groups.values()].map((g) => ({
+    快递公司: g.快递公司,
+    运单数: g.运单数,
+    总金额: round2(g.总金额),
+    总预付: round2(g.总预付),
+    总应付: round2(g.总应付),
+    总计费重量: round2(g.总计费重量),
+    平均单件应付: g.运单数 > 0 ? round2(g.总应付 / g.运单数) : 0,
+  })).sort((a, b) => b.运单数 - a.运单数);
+
+  return { summary, groups: groupRows };
+}
+
+/** 分组结果按 limit 截断（limit<=0 或非数字表示全部） */
+function limitGroups(result, limit) {
+  const n = limit === undefined ? 50 : Number(limit);
+  const total = result.groups.length;
+  const groups = Number.isFinite(n) && n > 0 ? result.groups.slice(0, n) : result.groups;
+  return { ...result, groups, groups_total: total };
 }
 
 // ---------- 工具实现 ----------
@@ -285,6 +417,71 @@ const TOOLS = [
       };
     },
   },
+  {
+    name: 'delete_cost',
+    description: '删除成本配置。specs 为要删除的规格名数组（与 list_skus 返回的 spec 完全一致）。仅移除成本配置条目，不改动订单/营销/快递数据。写入后网页端约 5 秒内自动同步。',
+    inputSchema: {
+      type: 'object',
+      properties: { specs: { type: 'array', items: { type: 'string' }, description: '要删除的规格名列表' } },
+      required: ['specs'],
+    },
+    handler: (args) => {
+      const specs = Array.isArray(args?.specs) ? args.specs.map(s => String(s).trim()).filter(Boolean) : [];
+      if (!specs.length) throw new Error('specs 不能为空');
+      const config = loadCostConfig();
+      const deleted = [];
+      const notFound = [];
+      for (const spec of specs) {
+        if (Object.prototype.hasOwnProperty.call(config, spec)) { delete config[spec]; deleted.push(spec); }
+        else notFound.push(spec);
+      }
+      if (!deleted.length) {
+        return { ok: false, deleted_count: 0, deleted: [], not_found: notFound, note: '未找到匹配的成本配置，未做写入' };
+      }
+      writeJson('cost', config);
+      return {
+        ok: true,
+        deleted_count: deleted.length,
+        deleted,
+        ...(notFound.length ? { not_found: notFound } : {}),
+        note: '已删除，网页端约 5 秒内自动同步',
+      };
+    },
+  },
+  {
+    name: 'list_marketing',
+    description: '查询营销推广数据（只读）。返回整体汇总（总曝光/点击/成交、点击率=总点击÷总曝光、转化率=总成交÷总点击、投产比）与按商品ID分组明细（含较均值对比与诊断）。可用 商品ID 关键字、dateFrom/dateTo（YYYY-MM-DD）筛选；limit 限制分组条数（默认 50，0 表示全部）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        商品ID: { type: 'string', description: '商品ID关键字（模糊匹配，可选）' },
+        dateFrom: { type: 'string', description: '起始日期 YYYY-MM-DD（可选）' },
+        dateTo: { type: 'string', description: '结束日期 YYYY-MM-DD（可选）' },
+        limit: { type: 'number', description: '分组返回条数上限，默认 50，0 表示全部' },
+      },
+    },
+    handler: (args) => {
+      const rows = readJson('marketing');
+      if (!Array.isArray(rows)) return { summary: null, groups: [], groups_total: 0, note: '暂无营销数据（未上传或为空）' };
+      return limitGroups(summarizeMarketing(rows, args || {}), args?.limit);
+    },
+  },
+  {
+    name: 'list_express_bill',
+    description: '查询快递对账账单（只读）。返回整体汇总（总运单数/总金额/总预付/总应付/平均单件）与按快递公司分组明细。可用 快递公司 关键字筛选；limit 限制分组条数（默认 50，0 表示全部）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        快递公司: { type: 'string', description: '快递公司关键字（模糊匹配，可选）' },
+        limit: { type: 'number', description: '分组返回条数上限，默认 50，0 表示全部' },
+      },
+    },
+    handler: (args) => {
+      const rows = readJson('expressBill');
+      if (!Array.isArray(rows)) return { summary: null, groups: [], groups_total: 0, note: '暂无快递账单数据（未上传或为空）' };
+      return limitGroups(summarizeExpressBill(rows, args || {}), args?.limit);
+    },
+  },
 ];
 
 // ---------- MCP 协议（Streamable HTTP） ----------
@@ -306,8 +503,8 @@ function handleJsonRpc(body, sessionMeta) {
       return reply({
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: 'pdd-sku-cost-mcp', version: '1.0.0' },
-        instructions: '拼多多 SKU 成本配置服务器。流程：list_skus 查看现状 → update_cost 修改成本/定价。网页端会自动同步你的修改。',
+        serverInfo: { name: 'pdd-sku-cost-mcp', version: '1.1.0' },
+        instructions: '拼多多 SKU 成本配置与经营数据服务器。成本：list_skus 查看现状 → get_cost / update_cost / delete_cost 查询、修改、删除成本与定价。经营数据（只读）：list_marketing 营销推广（点击率/转化率），list_express_bill 快递账单。网页端会自动同步成本修改。',
       });
     case 'notifications/initialized':
       return null; // 通知无响应
