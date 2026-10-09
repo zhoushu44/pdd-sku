@@ -32,13 +32,13 @@ const verdictClass: Record<SkuVerdict, string> = {
   可放大: 'bg-emerald-500 text-white',
   无推广: 'bg-slate-200 text-slate-600',
   明星款: 'bg-emerald-500 text-white',
-  潜力款: 'bg-teal-500 text-white',
-  提曝光: 'bg-cyan-500 text-white',
-  现金牛: 'bg-sky-500 text-white',
+  潜力款: 'bg-emerald-500 text-white',
+  提曝光: 'bg-emerald-500 text-white',
+  现金牛: 'bg-emerald-500 text-white',
   维持: 'bg-slate-300 text-slate-700',
   观察: 'bg-slate-200 text-slate-600',
   降本提价: 'bg-amber-500 text-white',
-  精简: 'bg-orange-500 text-white',
+  精简: 'bg-amber-500 text-white',
   止损: 'bg-red-600 text-white',
   清仓: 'bg-red-500 text-white',
   清退: 'bg-slate-400 text-white',
@@ -77,7 +77,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
     return (
       <th
         title={title}
-        className={`px-3 py-2.5 ${alignClass} text-[13px] font-medium text-slate-500 whitespace-nowrap bg-slate-100 border-b border-slate-200`}
+        className={`px-3 py-2 ${alignClass} text-[12px] font-medium text-slate-500 whitespace-nowrap bg-slate-100 border-b border-slate-200`}
       >
         {label}
       </th>
@@ -85,29 +85,29 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
   };
 
   return (
-    <div className="w-full bg-white rounded-xl border border-slate-200 p-6">
+    <div className="w-full bg-white rounded-xl border border-slate-200 p-3">
       {/* 标题 */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-500/20 flex items-center justify-center text-emerald-600 flex-shrink-0">
-          <TableProperties className="w-5 h-5" />
+          <TableProperties className="w-4 h-4" />
         </div>
-        <h2 className="text-base font-bold text-slate-900">
+        <h2 className="text-[13px] font-bold text-slate-900">
           {dimension === 'product' ? '单品明细' : 'SKU明细'}
         </h2>
-        <span className="px-2.5 py-1 rounded-full text-[13px] font-medium bg-cyan-50 text-cyan-600 border border-cyan-200">
+        <span className="px-2.5 py-1 rounded-full text-[13px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
           {isProduct ? '推广决策' : '成本利润拆解'}
         </span>
       </div>
 
       {/* 口径说明 */}
-      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] leading-6 text-slate-500">
+      <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] leading-6 text-slate-500">
         <span className="text-slate-900 font-medium">
           {dimension === 'product' ? '单品明细' : 'SKU明细'} 共 {overview.款数} {dimension === 'sku' ? '个SKU' : '个单品'}
         </span>
         {overview.统计期起 && overview.统计期止 && (
           <> · 统计期 {overview.统计期起} ~ {overview.统计期止}</>
         )}
-        {' '}· 期间推广费 <span className="text-purple-600 font-mono">{money(overview.期间推广费)}</span>
+        {' '}· 期间推广费 <span className="text-emerald-600 font-mono">{money(overview.期间推广费)}</span>
         {' '}· 运费险 <span className="text-slate-700 font-mono">{money(overview.运费险)}</span>
         <span className="text-slate-400">（@导入值，按订单归因）</span>
         <br />
@@ -135,7 +135,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
             <br />
             · 实际ROI = 净销售额÷分摊推广费（与净推广占比互为倒数，与实际保ROI 同分母，两列可直接比较大小）
             <br />
-            · 判定用实际ROI 比实际保本ROI：低于保本线→停推广；保本线到1.2倍→降预算；1.2倍以上→可放大
+            · 判定：单品利润&lt;0（亏损品）→ 利润门强制停推广；否则实际ROI 比实际保本ROI：低于保本线→停推广；保本线到1.2倍→降预算；1.2倍以上→可放大
           </>
         ) : (
           <>
@@ -152,7 +152,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
       </div>
 
       {/* 检索 / 排序 */}
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -174,7 +174,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="relative">
             <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
@@ -194,11 +194,11 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
       </div>
 
       {/* 表格 */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <div className="max-h-[560px] overflow-y-auto">
+      <div className="overflow-auto rounded-lg border border-slate-200">
+        <div className="max-h-[360px] overflow-y-auto">
           <table className="w-full">
             <thead className="sticky top-0 z-10">
-              <tr>
+              <tr className="bg-slate-100">
                 {renderHeader(dimension === 'sku' ? '款号' : '单品', 'left', dimension === 'sku' ? '款号 / 规格' : '商品名称 / 商品ID')}
                 {renderHeader('销售额', 'right', '有效订单商家实收合计')}
                 {renderHeader('退款金额', 'right', '退款成功订单的商家实收金额')}
@@ -214,14 +214,14 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
                 {renderHeader('单品利润', 'right', '单品毛利 - 快递 - 运费险 - 扣点 - 推广费 - 补偿')}
                 {isProduct && renderHeader('实际保ROI', 'right', '净销售额 ÷ (单品利润 + 推广费)')}
                 {isProduct && renderHeader('实际ROI', 'right', '净销售额 ÷ 分摊推广费')}
-                {renderHeader('判定', 'center', isProduct ? '实际ROI 对比实际保本ROI' : '盈利（全店利润率分位 P25/P75，仅已配置成本的SKU排名）× 动销（商品内销量占比）组合判定，悬浮查看依据')}
+                {renderHeader('判定', 'center', isProduct ? '单品利润<0（亏损品）→ 利润门强制停推广；否则实际ROI 对比实际保本ROI' : '盈利（全店利润率分位 P25/P75，仅已配置成本的SKU排名）× 动销（商品内销量占比）组合判定，悬浮查看依据')}
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
               {displayRows.map((row, idx) => (
                 <tr key={`${row.商品ID}-${row.款号}-${idx}`} className="hover:bg-slate-50 transition-colors duration-150">
-                  <td className="px-3 py-2.5 whitespace-nowrap">
+                  <td className="px-3 py-1.5 whitespace-nowrap">
                     <div className="text-[13px] font-semibold text-slate-900 max-w-[220px] truncate" title={row.款号}>
                       {row.款号}
                     </div>
@@ -229,53 +229,53 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
                       <div className="text-[13px] text-slate-400 font-mono truncate max-w-[220px]">{row.商品ID}</div>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.销售额)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">{money(row.退款金额)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{formatNumber(row.订单数)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.客单价)}</td>
-                  <td className={`px-3 py-2.5 whitespace-nowrap text-right text-[13px] font-mono ${
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.销售额)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">{money(row.退款金额)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{formatNumber(row.订单数)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.客单价)}</td>
+                  <td className={`px-3 py-1.5 whitespace-nowrap text-right text-[13px] font-mono ${
                     row.订单退款率 >= 30 ? 'text-red-600' : row.订单退款率 >= 15 ? 'text-amber-600' : 'text-slate-600'
                   }`}>
                     {row.订单退款率.toFixed(1)}%
                   </td>
                   {isProduct && (
                     <>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">
                         {row.推广费 > 0 ? money(row.推广费) : '—'}
                       </td>
-                      <td className={`px-3 py-2.5 whitespace-nowrap text-right text-[13px] font-mono ${
+                      <td className={`px-3 py-1.5 whitespace-nowrap text-right text-[13px] font-mono ${
                         row.净推广占比 > 40 ? 'text-red-600' : row.净推广占比 > 25 ? 'text-amber-600' : 'text-slate-600'
                       }`}>
                         {row.推广费 > 0 ? `${row.净推广占比.toFixed(1)}%` : '—'}
                       </td>
                     </>
                   )}
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
                     {row.补偿 > 0 ? money(row.补偿) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.成本)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.单品毛利)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.成本)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-700 font-mono">{money(row.单品毛利)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
                     {row.实际毛利率.toFixed(1)}%
                   </td>
-                  <td className={`px-3 py-2.5 whitespace-nowrap text-right text-[13px] font-semibold font-mono ${
+                  <td className={`px-3 py-1.5 whitespace-nowrap text-right text-[13px] font-semibold font-mono ${
                     row.单品利润 >= 0 ? 'text-emerald-600' : 'text-red-600'
                   }`}>
                     {row.单品利润 >= 0 ? '+' : ''}{money(row.单品利润)}
                   </td>
                   {isProduct && (
                     <>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right text-[13px] text-slate-500 font-mono">
                         {row.推广费 > 0 ? row.实际保ROI.toFixed(2) : '—'}
                       </td>
-                      <td className={`px-3 py-2.5 whitespace-nowrap text-right text-[13px] font-mono ${
+                      <td className={`px-3 py-1.5 whitespace-nowrap text-right text-[13px] font-mono ${
                         row.推广费 > 0 && row.实际ROI >= row.实际保ROI ? 'text-emerald-600' : 'text-slate-600'
                       }`}>
                         {row.推广费 > 0 ? row.实际ROI.toFixed(2) : '—'}
                       </td>
                     </>
                   )}
-                  <td className="px-3 py-2.5 whitespace-nowrap text-center">
+                  <td className="px-3 py-1.5 whitespace-nowrap text-center">
                     <span
                       title={row.判定依据}
                       className={`inline-block px-2 py-0.5 rounded text-[13px] font-medium ${verdictClass[row.判定]}`}
@@ -288,7 +288,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
 
               {displayRows.length === 0 && (
                 <tr>
-                  <td colSpan={isProduct ? 16 : 12} className="px-3 py-10 text-center text-[13px] text-slate-400">
+                  <td colSpan={isProduct ? 16 : 12} className="px-3 py-6 text-center text-[13px] text-slate-400">
                     暂无数据，请先导入销售与推广数据并配置成本
                   </td>
                 </tr>
@@ -305,7 +305,7 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
           {keyword ? `（筛选自 ${rows.length} ${dimension === 'sku' ? '个SKU' : '个单品'}）` : ''}
         </div>
         {isProduct ? (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-1.5 rounded-full bg-red-500"></span>停推广
             </span>
@@ -320,14 +320,14 @@ const SkuDetail: React.FC<SkuDetailProps> = ({ summaries, marketingData, costCon
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>明星款</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-teal-500"></span>潜力款</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-cyan-500"></span>提曝光</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-sky-500"></span>现金牛</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>潜力款</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>提曝光</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>现金牛</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-slate-300"></span>维持/观察</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-amber-500"></span>降本提价</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-orange-500"></span>精简</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-amber-500"></span>精简</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-red-500"></span>止损/清仓</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-slate-400"></span>清退</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-slate-200"></span>未配置</span>

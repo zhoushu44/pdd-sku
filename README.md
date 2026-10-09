@@ -376,7 +376,7 @@ docker-compose restart
 
 #### 宝塔 Docker 面板部署（推荐）
 
-1. 在宝塔面板 **Docker → 镜像 → 拉取镜像**，输入 `<用户名>/trae-project:4.1` 或 `<用户名>/trae-project:latest`
+1. 在宝塔面板 **Docker → 镜像 → 拉取镜像**，输入 `<用户名>/trae-project:7.0` 或 `<用户名>/trae-project:latest`
 2. **Docker → 容器 → 创建容器**，选择刚拉取的镜像
 3. 端口映射设置为 `5173:5173`（或自定义端口）
 4. **启动命令（Command）和入口点（Entrypoint）必须留空**，让容器使用镜像内置的默认启动命令
@@ -388,8 +388,8 @@ docker-compose restart
 #### 命令行部署
 
 ```bash
-# 拉取镜像（使用 4.1 版本）
-docker pull <用户名>/trae-project:4.1
+# 拉取镜像（使用 7.0 版本）
+docker pull <用户名>/trae-project:7.0
 
 # 或使用最新版本
 docker pull <用户名>/trae-project:latest
@@ -401,7 +401,7 @@ docker run -d \
   -p 5173:5173 \
   --memory=512m \
   --cpus=1 \
-  <用户名>/trae-project:4.1
+  <用户名>/trae-project:7.0
 ```
 
 访问 `http://localhost:5173` 即可。
@@ -432,13 +432,13 @@ docker-compose up -d --build
 
 ```bash
 # 1. 拉取新镜像
-docker pull <用户名>/trae-project:4.1
+docker pull <用户名>/trae-project:7.0
 
 # 2. 停止并删除旧容器
 docker stop trae-project && docker rm trae-project
 
 # 3. 用新镜像启动容器
-docker run -d --name trae-project --restart unless-stopped -p 5173:5173 <用户名>/trae-project:4.1
+docker run -d --name trae-project --restart unless-stopped -p 5173:5173 <用户名>/trae-project:7.0
 ```
 
 宝塔面板更新：**Docker → 镜像 → 拉取镜像**（覆盖旧版本），然后删除旧容器、用新镜像重新创建即可。
@@ -485,7 +485,7 @@ docker exec -it trae-project sh
 
 - **触发条件**：push 到 `main` 或 `master` 分支
 - **自动构建**：多阶段 Docker 构建（node:20 构建 + nginx:1.27 服务）
-- **自动推送**：同时打上 `4.1` 和 `latest` 标签推送到 Docker Hub
+- **自动推送**：同时打上 `7.0` 和 `latest` 标签推送到 Docker Hub
 - **缓存加速**：启用 GitHub Actions 层缓存
 
 > 💡 **重要**：所有 Docker 镜像构建和推送操作都由 GitHub Actions 自动完成，本地无需执行任何推送操作。

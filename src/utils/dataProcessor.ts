@@ -1,4 +1,4 @@
-import { OrderData, ProductSummary, DetailedCostConfig, CostItem, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion, AISuggestion, AIPriceInput, AIPriceResult, BundleSuggestion, SkuDetailRow, SkuDetailOverview, SkuVerdict, SkuDetailDimension } from '../types';
+import { OrderData, ProductSummary, DetailedCostConfig, CostItem, TimeRange, MarketingDataRow, RefundStat, RefundOverview, PeriodComparison, MetricComparison, Advice, BudgetSuggestion, AISuggestion, AIPriceInput, AIPriceResult, BundleSuggestion, SkuDetailRow, SkuDetailOverview, SkuVerdict, SkuDetailDimension, ExpressBillRecord, ExpressBillSummary, ExpressBillMatchResult, ExpressBillAmountBasis, SkuShippingFee } from '../types';
 
 /**
  * 解析日期字符串为本地时间 Date 对象，避免时区偏差
@@ -1867,7 +1867,7 @@ const PLATFORM_FEE_RATE = 0.006;
  * - 实际毛利率 = 单品毛利 ÷ 净销售额 × 100
  * - 实际ROI = 净销售额 ÷ 分摊推广费
  * - 实际保ROI = 净销售额 ÷ (单品利润 + 分摊推广费)
- * - 判定（单品维度）：实际ROI 低于保本线 → 停推广；保本线到 1.2 倍 → 降预算；1.2 倍以上 → 可放大
+ * - 判定（单品维度）：单品利润<0（亏损品）→ 利润门强制停推广；否则实际ROI 低于保本线 → 停推广；保本线到 1.2 倍 → 降预算；1.2 倍以上 → 可放大
  * - 判定（SKU 维度）：盈利×动销组合矩阵——
  *   盈利分级（全店分位，仅已配置成本且有销量的 SKU 参与排名）：单品利润<0 → 亏损；利润率<P25 → 偏低；P25~P75 → 正常；≥P75 → 优质；未配置成本 → 未配置
  *   动销分级（同商品ID内按销量占比）：占比≥40%或Top1且≥20% → 主力；占比<5%且非零 → 滞销；销量=0 → 零销；其余 → 动销
@@ -1987,6 +1987,10 @@ export function calculateSkuDetail(
       if (推广费 <= 0) {
         判定 = '无推广';
         判定依据 = '无推广花费，不参与推广决策';
+      } else if (单品利润 < 0) {
+        // 利润门强制降级：单品利润为负（亏损品），无论 ROI 表现如何都停推广
+        判定 = '停推广';
+        判定依据 = `利润门：单品利润 ${单品利润.toFixed(2)} < 0，亏损品强制停推广（实际ROI ${实际ROI.toFixed(2)} / 保本ROI ${实际保ROI.toFixed(2)}）`;
       } else if (实际ROI < 实际保ROI) {
         判定 = '停推广';
         判定依据 = `实际ROI ${实际ROI.toFixed(2)} < 保本ROI ${实际保ROI.toFixed(2)}，低于保本线`;
@@ -2142,5 +2146,288 @@ export function calculateSkuDetail(
   };
 
   return { rows, overview };
+}
+
+// ============ 快递对账账单：解析 + 匹配 ============
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * 归一化运单号：去空格/连字符并转大写，抹平不同快递公司单号在大小写、分隔符上的差异。
+ */
+export function normalizeWaybill(waybill: string): string {
+  return (waybill || '').replace(/[\s\-]/g, '').toUpperCase();
+}
+
+/**
+ * 快递账单列名别名表。
+ * 不同快递公司（云途/顺丰/中通/圆通…）的对账模板列名差异较大，
+ * 统一在此登记一次，解析逻辑无需改动。
+ */
+const EXPRESS_BILL_FIELD_ALIASES: Record<string, string[]> = {
+  '运单号码': ['运单号', '快递单号', '运单编号', '物流单号', '运单代码', '包裹号', '单号'],
+  '扫描时间': ['时间', '发货时间', '扫描日期', '寄件时间', '揽收时间'],
+  '计费重量': ['计费重量(kg)', '计费重量（kg）', '重量', '重量(kg)', '计费重'],
+  '总金额': ['金额', '运费', '总运费', '面单金额', '应收金额', '运费金额'],
+  '预付': ['预付款', '已预付', '预付金额'],
+  '应付': ['应付金额', '结算金额', '实付金额', '应付费用', '本次应付', '应付款'],
+  '计费省份': ['省份', '目的地省份', '收件省份', '寄达省'],
+  '目的地': ['计费目的地名称', '目的地名称', '收件城市', '派送地'],
+  '快递公司': ['结算对象', '承运商', '快递公司名称'],
+  '物料类型': ['物料结算名称', '物料名称', '物料'],
+};
+
+/** 归一化表头字面量：用于别名表的精确/归一化比对 */
+function normalizeFieldName(name: string): string {
+  return normalizeHeader(name);
+}
+
+/**
+ * 构建「列名 → 下标」解析器：精确匹配 → 别名匹配（归一化后），
+ * 可在不修改解析逻辑的前提下兼容不同快递公司的列名差异。
+ */
+function createFieldResolver(headers: string[], aliases: Record<string, string[]>) {
+  const normalized = new Map<string, number>();
+  headers.forEach((header, index) => {
+    const key = normalizeHeader(header);
+    if (!normalized.has(key)) normalized.set(key, index);
+  });
+
+  return (fieldName: string): number => {
+    const candidates = [fieldName, ...(aliases[fieldName] || [])];
+    for (const name of candidates) {
+      const hit = normalized.get(normalizeFieldName(name));
+      if (hit !== undefined) return hit;
+    }
+    return -1;
+  };
+}
+
+/**
+ * 判断某行是否为快递账单表头：
+ * 不绑定具体列名，只要同时出现「运单」类列与「金额/应付/运费」类列即可。
+ */
+function isExpressBillHeaderLine(line: string): boolean {
+  const headers = parseCSVLine(line).map(normalizeHeader);
+  const hasWaybill = headers.some(h => h.includes('运单') || h.includes('快递单号') || h.includes('物流单号') || h.includes('waybill'));
+  const hasAmount = headers.some(h => h.includes('应付') || h.includes('金额') || h.includes('运费'));
+  return hasWaybill && hasAmount;
+}
+
+/**
+ * 解析快递公司对账单（Excel 转 CSV 后）。
+ * 兼容点：表头别名、说明/汇总行、金额列缺失、时间双格式、空值、多快递公司模板。
+ * @param csvText CSV 文本
+ * @param fileName 账单文件名（用于回退快递公司名）
+ */
+export function parseExpressBill(csvText: string, fileName = ''): ExpressBillRecord[] {
+  const lines = csvText.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  // 定位表头：账单说明行可能位于表头前后，识别逻辑不绑定具体列名
+  const headerIndex = lines.findIndex(isExpressBillHeaderLine);
+  if (headerIndex < 0) return [];
+  const headers = parseCSVLine(lines[headerIndex]);
+  const resolve = createFieldResolver(headers, EXPRESS_BILL_FIELD_ALIASES);
+
+  const idx = {
+    运单号: resolve('运单号码'),
+    扫描时间: resolve('扫描时间'),
+    计费重量: resolve('计费重量'),
+    总金额: resolve('总金额'),
+    预付: resolve('预付'),
+    应付: resolve('应付'),
+    计费省份: resolve('计费省份'),
+    目的地: resolve('目的地'),
+    快递公司: resolve('快递公司'),
+    物料类型: resolve('物料类型'),
+  };
+
+  const fallbackCompany = fileName.replace(/\.[^.]+$/, '');
+  const records: ExpressBillRecord[] = [];
+
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    const pick = (index: number): string => (index >= 0 && index < values.length ? values[index] : '');
+
+    const waybill = pick(idx.运单号).trim();
+    // 跳过汇总行（无运单号）与空行
+    if (!waybill) continue;
+
+    const gross = toNumber(pick(idx.总金额));
+    const prepaid = idx.预付 >= 0 ? toNumber(pick(idx.预付)) : 0;
+    const payableRaw = pick(idx.应付);
+    // 应付列存在且非空时取应付；否则按「总金额 + 预付」推导
+    const payable = idx.应付 >= 0 && payableRaw.trim() !== '' ? toNumber(payableRaw) : gross + prepaid;
+
+    records.push({
+      运单号: waybill,
+      扫描时间: pick(idx.扫描时间),
+      计费重量: toNumber(pick(idx.计费重量)),
+      总金额: gross,
+      预付: prepaid,
+      应付: payable,
+      计费省份: pick(idx.计费省份),
+      目的地: pick(idx.目的地),
+      快递公司: pick(idx.快递公司) || fallbackCompany,
+      物料类型: pick(idx.物料类型),
+    });
+  }
+
+  return records;
+}
+
+/** 内部聚合结构：按规格累计匹配结果 */
+interface SpecShippingAgg extends SkuShippingFee {
+  matchedWaybills: Set<string>;
+}
+
+/**
+ * 快递账单 ↔ 订单匹配：按运单号关联订单，聚合到「商品规格」维度，
+ * 产出各 SKU 的单件快递费（用于回填成本配置）与整单快递成本核对结果。
+ * @param records 账单明细
+ * @param orders 订单数据
+ * @param basis 金额口径：payable=应付（默认）；gross=总金额
+ * @param fileName 账单文件名（展示用）
+ */
+export function matchExpressBill(
+  records: ExpressBillRecord[],
+  orders: OrderData[],
+  basis: ExpressBillAmountBasis = 'payable',
+  fileName = ''
+): ExpressBillMatchResult {
+  const amountOf = (r: ExpressBillRecord): number => (basis === 'gross' ? r.总金额 : r.应付);
+
+  // 1. 账单侧：合计金额 + 按运单号去重聚合
+  let 总金额 = 0;
+  let 总预付 = 0;
+  let 总应付 = 0;
+  let 快递公司 = '';
+  const billMap = new Map<string, number>(); // 运单号 → 金额（同单多行累加）
+  for (const r of records) {
+    总金额 += r.总金额;
+    总预付 += r.预付;
+    总应付 += r.应付;
+    if (!快递公司 && r.快递公司) 快递公司 = r.快递公司;
+    const key = normalizeWaybill(r.运单号);
+    if (!key) continue;
+    billMap.set(key, (billMap.get(key) || 0) + amountOf(r));
+  }
+
+  const 总运单数 = billMap.size;
+  const 总基础金额 = basis === 'gross' ? 总金额 : 总应付;
+
+  // 2. 订单侧：运单号 → 订单行，并预置各规格订单数
+  const orderByWaybill = new Map<string, OrderData[]>();
+  const specMap = new Map<string, SpecShippingAgg>();
+  const ensureSpec = (spec: string, sample?: OrderData): SpecShippingAgg => {
+    let entry = specMap.get(spec);
+    if (!entry) {
+      entry = {
+        规格: spec,
+        商品ID: sample?.商品id || '',
+        商品名称: sample?.商品 || '',
+        订单数: 0,
+        匹配运单数: 0,
+        匹配件数: 0,
+        匹配率: 0,
+        快递费合计: 0,
+        平均快递费: 0,
+        matchedWaybills: new Set<string>(),
+      };
+      specMap.set(spec, entry);
+    }
+    return entry;
+  };
+
+  for (const o of orders) {
+    const spec = o.商品规格 || '(无规格)';
+    ensureSpec(spec, o).订单数 += 1;
+    const key = normalizeWaybill(o.快递单号);
+    if (!key) continue;
+    const arr = orderByWaybill.get(key);
+    if (arr) arr.push(o);
+    else orderByWaybill.set(key, [o]);
+  }
+
+  // 3. 匹配：账单运单号命中订单，金额按命中行数均摊后计入对应规格
+  let 匹配运单数 = 0;
+  for (const [waybill, amount] of billMap) {
+    const lines = orderByWaybill.get(waybill);
+    if (!lines || lines.length === 0) continue;
+    匹配运单数 += 1;
+    const perLine = amount / lines.length;
+    for (const o of lines) {
+      const entry = ensureSpec(o.商品规格 || '(无规格)', o);
+      entry.matchedWaybills.add(waybill);
+      entry.快递费合计 += perLine;
+      const qty = o.商品数量 && o.商品数量 > 0 ? o.商品数量 : 1;
+      entry.匹配件数 += qty;
+    }
+  }
+
+  // 4. 生成按规格结果：单件快递费 = 快递费合计 / 匹配件数（保证「单件 × 销量 ≈ 实际账单」）
+  const 按规格: SkuShippingFee[] = Array.from(specMap.values())
+    .map(entry => {
+      const 匹配运单数SKU = entry.matchedWaybills.size;
+      const divisor = entry.匹配件数 > 0 ? entry.匹配件数 : 匹配运单数SKU;
+      return {
+        规格: entry.规格,
+        商品ID: entry.商品ID,
+        商品名称: entry.商品名称,
+        订单数: entry.订单数,
+        匹配运单数: 匹配运单数SKU,
+        匹配件数: entry.匹配件数,
+        匹配率: entry.订单数 > 0 ? round2((匹配运单数SKU / entry.订单数) * 100) : 0,
+        快递费合计: round2(entry.快递费合计),
+        平均快递费: divisor > 0 ? round2(entry.快递费合计 / divisor) : 0,
+      };
+    })
+    .sort((a, b) => b.快递费合计 - a.快递费合计);
+
+  const 汇总: ExpressBillSummary = {
+    总运单数,
+    总金额: round2(总金额),
+    总预付: round2(总预付),
+    总应付: round2(总应付),
+    平均单件金额: 总运单数 > 0 ? round2(总基础金额 / 总运单数) : 0,
+    快递公司,
+    文件名: fileName,
+  };
+
+  return {
+    汇总,
+    按规格,
+    匹配运单数,
+    未匹配运单数: 总运单数 - 匹配运单数,
+    匹配率: 总运单数 > 0 ? round2((匹配运单数 / 总运单数) * 100) : 0,
+  };
+}
+
+/**
+ * 快递账单去重：以「运单号 + 物料类型」为唯一键
+ * （同一运单的不同物料计费项各有一行，需全部保留；重复行以最新上传为准）
+ */
+export function dedupeExpressBill(records: ExpressBillRecord[]): ExpressBillRecord[] {
+  const map = new Map<string, ExpressBillRecord>();
+  for (const r of records) {
+    map.set(`${normalizeWaybill(r.运单号)}|${r.物料类型 || ''}`, r);
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * 合并快递账单：已有账单 + 新上传账单，去重后返回合并结果与统计
+ * （支持多月、多快递公司账单累计导入；同一运单以最新上传的账单为准）
+ */
+export function mergeExpressBillRecords(
+  existing: ExpressBillRecord[],
+  incoming: ExpressBillRecord[]
+): { merged: ExpressBillRecord[]; added: number; duplicates: number } {
+  const merged = dedupeExpressBill([...existing, ...incoming]);
+  const added = merged.length - existing.length;
+  return { merged, added, duplicates: incoming.length - added };
 }
 

@@ -287,12 +287,6 @@ export interface BundleSuggestion {
   理由: string;
 }
 
-export interface AIModelConfig {
-  apiUrl: string;
-  apiKey: string;
-  model: string;
-}
-
 export type GeneratedSKUType = '低价引流' | '标准款' | '利润款' | '规格扩展' | '套餐组合' | '库存策略';
 
 export interface GeneratedAISKU {
@@ -357,4 +351,56 @@ export interface SkuDetailOverview {
   统计期止: string;
   期间推广费: number;    // 所有款的推广费合计
   运费险: number;        // 运费险合计
+}
+
+// ============ 快递对账账单 ============
+
+// 账单明细行（一行 = 一个运单）
+export interface ExpressBillRecord {
+  运单号: string;
+  扫描时间: string;
+  计费重量: number;
+  总金额: number;   // 面单/运费金额
+  预付: number;     // 预付（可为负）
+  应付: number;     // 应付金额（= 总金额 + 预付；账单缺失该列时自动推导）
+  计费省份: string;
+  目的地: string;
+  快递公司: string; // 账单结算对象名称（缺失时回退文件名）
+  物料类型: string;
+}
+
+// 成本口径：payable=应付（实际结算，默认）；gross=总金额（面单运费）
+export type ExpressBillAmountBasis = 'payable' | 'gross';
+
+// 账单汇总
+export interface ExpressBillSummary {
+  总运单数: number;        // 有效运单行数
+  总金额: number;          // 面单金额合计
+  总预付: number;          // 预付合计
+  总应付: number;          // 应付合计
+  平均单件金额: number;    // 按当前口径的单件均值
+  快递公司: string;
+  文件名: string;
+}
+
+// 按SKU聚合的快递费
+export interface SkuShippingFee {
+  规格: string;
+  商品ID: string;
+  商品名称: string;
+  订单数: number;        // 该规格订单数
+  匹配运单数: number;    // 命中的账单运单数
+  匹配件数: number;      // 命中订单的商品数量合计
+  匹配率: number;        // 匹配运单数 / 订单数 * 100
+  快递费合计: number;    // 命中运单金额合计（按口径）
+  平均快递费: number;    // 单件快递费 = 合计 / 匹配件数（用于回填成本配置）
+}
+
+// 账单匹配结果
+export interface ExpressBillMatchResult {
+  汇总: ExpressBillSummary;
+  按规格: SkuShippingFee[];
+  匹配运单数: number;
+  未匹配运单数: number;
+  匹配率: number;        // 匹配运单数 / 总运单数 * 100
 }

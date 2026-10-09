@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -79,6 +80,21 @@ function configStorePlugin(): Plugin {
   }
 }
 
+// 开发环境自启 MCP 服务器（与 .data 共享数据），并把 /mcp 代理过去
+function mcpDevPlugin(): Plugin {
+  return {
+    name: 'dev-mcp-server',
+    configureServer() {
+      const child = spawn(process.execPath, ['server/mcp-server.mjs'], {
+        cwd: path.resolve(__dirname),
+        stdio: 'inherit',
+        env: { ...process.env, MCP_PORT: '9100', MCP_DATA_DIR: path.resolve(__dirname, '.data') },
+      })
+      process.on('exit', () => child.kill())
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   build: {
@@ -86,15 +102,21 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api/ai': {
-        target: 'https://token.86969678.xyz',
+      // 本地开发走同一端口；生产环境由 nginx 转发到 mcp 容器
+      '/mcp': {
+        target: 'http://127.0.0.1:9100',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/ai/, '/v1'),
+      },
+      // 部署地址上报（网页「mcp」按钮本机访问时读取）
+      '/server-info': {
+        target: 'http://127.0.0.1:9100',
+        changeOrigin: true,
       },
     },
   },
   plugins: [
     configStorePlugin(),
+    mcpDevPlugin(),
     react({
       babel: {
         plugins: [

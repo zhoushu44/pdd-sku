@@ -12,6 +12,27 @@ services:
       # 成本配置等业务数据持久化到宿主机（重建容器不丢数据）
       - ./data:/data
     restart: unless-stopped
+    depends_on:
+      - mcp
+    networks:
+      - pdd-network
+
+  # MCP 服务器：AI 客户端（Trae/Cherry Studio 等）远程读写成本配置
+  mcp:
+    image: node:20-alpine
+    container_name: pdd-sku-mcp
+    working_dir: /server
+    command: node mcp-server.mjs
+    environment:
+      - MCP_DATA_DIR=/data
+      - MCP_PORT=9100
+    volumes:
+      # 与前端共享同一份数据（成本配置/订单），实现"AI 写 → 网页同步"
+      - ./data:/data
+      - ./server:/server:ro
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
     networks:
       - pdd-network
 

@@ -21,7 +21,7 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
       return 'text-emerald-600';
     }
     if (rate >= 5) {
-      return 'text-cyan-600';
+      return 'text-emerald-600';
     }
     if (rate >= 0) {
       return 'text-amber-600';
@@ -42,7 +42,7 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
     } else if (rate >= 5) {
       return {
         width: `${clampedWidth}%`,
-        background: `linear-gradient(90deg, #06b6d4 0%, #22d3ee 100%)`,
+        background: `linear-gradient(90deg, #34d399 0%, #6ee7b7 100%)`,
       };
     } else if (rate >= 0) {
       return {
@@ -161,7 +161,7 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
     const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
     return (
       <th
-        className={`px-4 py-3 ${alignClass} bg-slate-100 text-[13px] font-medium text-slate-500 cursor-pointer hover:text-slate-600 transition-colors select-none`}
+        className={`px-3 py-2 ${alignClass} bg-slate-100 text-[12px] font-medium text-slate-500 cursor-pointer hover:text-slate-600 transition-colors select-none`}
         onClick={() => handleSort(key)}
       >
         <div className="flex items-center gap-2">
@@ -173,19 +173,19 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
   };
 
   return (
-    <div className="w-full bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+    <div className="w-full bg-white rounded-xl p-3 border border-slate-200 shadow-sm">
       {/* 标题 */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <BarChart3 className="w-5 h-5 text-emerald-600" />
-          <h2 className="text-base font-semibold text-slate-900">商品销售分析</h2>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-emerald-600" />
+          <h2 className="text-[13px] font-semibold text-slate-900">商品销售分析</h2>
           <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full">
             <Link2 className="w-3.5 h-3.5 text-emerald-600" />
             <span className="text-[13px] text-emerald-600">成本已与利润计算同步</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] text-slate-500">
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-slate-500">
             共 {summaries.length} 个商品规格
           </span>
           <span className={`px-2 py-0.5 rounded-full text-[13px] border ${
@@ -199,11 +199,11 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
       </div>
 
       {/* 表格容器 */}
-      <div className="overflow-x-auto">
+      <div className="overflow-auto rounded-lg border border-slate-200 max-h-[360px]">
         <table className="w-full">
           {/* 表头 */}
-          <thead>
-            <tr className="border-b border-slate-200">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-slate-200 bg-slate-100">
               {renderSortableHeader('商品规格', '规格')}
               {renderSortableHeader('商品ID', '商品ID')}
               {renderSortableHeader('销售额', '销售额', 'right')}
@@ -227,49 +227,49 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
                 className="hover:bg-slate-50 transition-colors duration-200"
               >
                 {/* 商品规格 */}
-                <td className="px-4 py-4 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="text-[13px] font-medium text-slate-900 max-w-[200px] truncate" title={item.规格}>
                     {item.规格}
                   </div>
                 </td>
 
                 {/* 商品ID */}
-                <td className="px-4 py-4 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="text-[13px] text-slate-600 font-mono max-w-[140px] truncate" title={item.商品ID}>
                     {item.商品ID || '-'}
                   </div>
                 </td>
 
                 {/* 销售额 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="text-[13px] text-slate-700 font-mono">
                     {formatAmount(item.销售额)}
                   </div>
                 </td>
 
                 {/* 销量 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="text-[13px] text-slate-700 font-mono">
                     {formatNumber(item.销量)}
                   </div>
                 </td>
 
                 {/* 订单数 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="text-[13px] text-slate-700 font-mono">
                     {formatNumber(item.订单数)}
                   </div>
                 </td>
 
                 {/* 平均客单价 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="text-[13px] text-slate-700 font-mono">
                     {formatAmount(item.平均客单价)}
                   </div>
                 </td>
 
                 {/* SKU净利润（来自利润计算模块，不可编辑） */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div
                     className={`text-[13px] font-mono ${item.SKU净利润 > 0 ? 'text-emerald-600' : item.SKU净利润 < 0 ? 'text-red-600' : 'text-slate-500'}`}
                     title={`来自利润计算模块: ${item.SKU净利润 !== 0 ? formatAmount(item.SKU净利润) : '未设置（需在利润计算模块设置定价和成本单价）'}`}
@@ -279,14 +279,14 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
                 </td>
 
                 {/* 总成本 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="text-[13px] text-slate-700 font-mono">
                     {formatAmount(item.总成本)}
                   </div>
                 </td>
 
                 {/* 订单引流成本（单件：该商品ID总营销费用/总订单数） */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div
                     className="text-[13px] text-emerald-600 font-mono"
                     title={`单件引流成本 = 商品ID总营销费用 / 商品ID总订单数\n净利润已扣除：${formatAmount(item.订单引流成本 * item.订单数)}`}
@@ -296,11 +296,11 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
                 </td>
 
                 {/* 真实退款率 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <span
                     className={`text-[13px] font-mono ${
                       item.真实退款率 >= 20 ? 'text-red-600' :
-                      item.真实退款率 >= 10 ? 'text-orange-600' :
+                      item.真实退款率 >= 10 ? 'text-amber-600' :
                       item.真实退款率 > 0 ? 'text-amber-600' : 'text-slate-400'
                     }`}
                     title={`退款成功额 / (销售额 + 退款成功额) × 100\n利润计算已自动应用此退款率（除非手动覆盖）`}
@@ -310,7 +310,7 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
                 </td>
 
                 {/* 净利润 */}
-                <td className="px-4 py-4 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className={`text-[13px] font-semibold font-mono ${getProfitRateColorClass(item.净利润)}`}>
                     {item.净利润 >= 0 ? '+' : ''}
                     {formatAmount(item.净利润)}
@@ -318,7 +318,7 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
                 </td>
 
                 {/* 利润率（带进度条可视化） */}
-                <td className="px-4 py-4 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="flex flex-col items-end gap-1">
                     <div className={`text-[13px] font-semibold font-mono ${getProfitRateColorClass(item.利润率)}`}>
                       {item.利润率 >= 0 ? '+' : ''}
@@ -340,55 +340,55 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
           {/* 合计行 */}
           <tfoot>
             <tr className="border-t-2 border-slate-300 bg-slate-50">
-              <td className="px-4 py-4 whitespace-nowrap">
+              <td className="px-3 py-1.5 whitespace-nowrap">
                 <div className="text-[13px] font-bold text-slate-900">合计</div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] text-slate-500 font-mono">-</div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-slate-900 font-mono">
                   {formatAmount(totals.销售额)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-slate-900 font-mono">
                   {formatNumber(totals.销量)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-slate-900 font-mono">
                   {formatNumber(totals.订单数)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-slate-900 font-mono">
                   {formatAmount(totals.平均客单价)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] text-slate-500 font-mono">-</div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-slate-900 font-mono">
                   {formatAmount(totals.总成本)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] font-bold text-emerald-600 font-mono">
                   {totals.引流成本总额 > 0 ? formatAmount(totals.引流成本总额) : '-'}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className="text-[13px] text-slate-500 font-mono">-</div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap text-right">
+              <td className="px-3 py-1.5 whitespace-nowrap text-right">
                 <div className={`text-[13px] font-bold font-mono ${getProfitRateColorClass(totals.净利润)}`}>
                   {totals.净利润 >= 0 ? '+' : ''}
                   {formatAmount(totals.净利润)}
                 </div>
               </td>
-              <td className="px-4 py-4 whitespace-nowrap">
+              <td className="px-3 py-1.5 whitespace-nowrap">
                 <div className="flex flex-col items-end gap-1">
                   <div className={`text-[13px] font-bold font-mono ${getProfitRateColorClass(totals.利润率)}`}>
                     {totals.利润率 >= 0 ? '+' : ''}
@@ -411,13 +411,13 @@ const ProductAnalysis: React.FC<ProductAnalysisProps> = ({ summaries, costConfig
       {/* 表格底部信息 */}
       <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between text-[13px] text-slate-400">
         <div>数据更新时间：{new Date().toLocaleString('zh-CN')}</div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>
             利润率 ≥15%
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-1.5 rounded-full bg-cyan-500"></span>
+            <span className="w-3 h-1.5 rounded-full bg-emerald-500"></span>
             5%~15%
           </span>
           <span className="flex items-center gap-1.5">

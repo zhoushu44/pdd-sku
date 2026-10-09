@@ -6,20 +6,27 @@ import CostInputPanel from '../components/CostInputPanel';
 import MarketingAnalysis from '../components/MarketingAnalysis';
 import RefundAnalysis from '../components/RefundAnalysis';
 import AdviceCenter from '../components/AdviceCenter';
-import { parseOrderData, parseMarketingCSV, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison, mergeOrders, mergeMarketingRows } from '../utils/dataProcessor';
-import { OrderData, DetailedCostConfig, MarketingDataRow, TimeRange } from '../types';
+import ExpressBillAnalysis from '../components/ExpressBillAnalysis';
+import { parseOrderData, parseMarketingCSV, parseExpressBill, groupBySpec, calculateProfit, filterOrdersByTimeRange, filterMarketingByTimeRange, mergeMarketingData, calculatePeriodComparison, mergeOrders, mergeMarketingRows, mergeExpressBillRecords } from '../utils/dataProcessor';
+import { OrderData, DetailedCostConfig, MarketingDataRow, TimeRange, ExpressBillRecord } from '../types';
 import { loadCostConfig, saveCostConfig } from '../lib/configStore';
-import { loadSalesOrders, saveSalesOrders, loadMarketingData, saveMarketingData, clearSalesOrders, clearMarketingData } from '../lib/dataStore';
-import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, CircleHelp, Trash2 } from 'lucide-react';
+import { loadSalesOrders, saveSalesOrders, loadMarketingData, saveMarketingData, clearSalesOrders, clearMarketingData, loadExpressBill, saveExpressBill, clearExpressBill } from '../lib/dataStore';
+import { LayoutDashboard, Upload, RefreshCw, ShoppingCart, Megaphone, Calendar, Search, X, Trash2, Truck } from 'lucide-react';
+
+// 顶部工具栏：三个数据上传按钮统一样式（主操作风格）
+const uploadButtonClass =
+  'flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[12px] transition-colors cursor-pointer shadow-sm';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [marketingData, setMarketingData] = useState<MarketingDataRow[]>([]);
+  const [expressBill, setExpressBill] = useState<ExpressBillRecord[]>([]);
+  const [expressBillFileName, setExpressBillFileName] = useState('');
   // 当前订单是否来自内置样例（public/orders.csv）。为真时首次上传直接覆盖，避免样例数据混入
   const [isSampleData, setIsSampleData] = useState(false);
   const [costConfig, setCostConfig] = useState<DetailedCostConfig>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sku' | 'product' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sku' | 'product' | 'analysis' | 'cost' | 'marketing' | 'refund' | 'advice' | 'expressBill'>('overview');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [searchProductId, setSearchProductId] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -118,15 +125,17 @@ export default function Dashboard() {
     if (saved !== null) setMarketingData(saved);
   };
 
-  // 清空全部上传数据（订单 + 营销），并持久化空状态
+  // 清空全部上传数据（订单 + 营销 + 快递账单），并持久化空状态
   const handleClearAllData = async () => {
-    if (!confirm('确定清空全部上传数据吗？\n将删除已导入的销售订单和推广数据（成本配置不受影响）。')) return;
+    if (!confirm('确定清空全部上传数据吗？\n将删除已导入的销售订单、推广数据和快递账单（成本配置不受影响）。')) return;
     setOrders([]);
     setMarketingData([]);
+    setExpressBill([]);
+    setExpressBillFileName('');
     setIsSampleData(false);
     setSearchInput('');
     setSearchProductId('');
-    await Promise.all([clearSalesOrders(), clearMarketingData()]);
+    await Promise.all([clearSalesOrders(), clearMarketingData(), clearExpressBill()]);
   };
 
   // 处理推广数据文件上传
@@ -167,6 +176,58 @@ export default function Dashboard() {
     }
   };
 
+  // 处理快递对账账单文件上传（支持 Excel/CSV，整份覆盖并持久化）
+  const handleExpressBillFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let csvText: string;
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!worksheet) throw new Error('工作簿不包含可读取的工作表');
+        csvText = XLSX.utils.sheet_to_csv(worksheet);
+      } else {
+        csvText = await file.text();
+      }
+
+      const parsedBill = parseExpressBill(csvText, file.name);
+      if (parsedBill.length === 0) {
+        alert('账单解析失败，请检查是否包含「运单号」与「金额/应付」等列');
+        return;
+      }
+      // 与已有账单合并去重（支持多月、多快递公司账单累计导入）
+      const { merged, added, duplicates } = mergeExpressBillRecords(expressBill, parsedBill);
+      setExpressBill(merged);
+      setExpressBillFileName(file.name);
+      await saveExpressBill(merged);
+      if (duplicates > 0) {
+        alert(`快递账单导入完成：新增 ${added} 条，去重 ${duplicates} 条（共 ${merged.length} 条）`);
+      }
+      setActiveTab('expressBill');
+    } catch (error) {
+      console.error('解析快递账单失败:', error);
+      alert('文件解析失败，请检查快递账单格式');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  // 清空快递账单
+  const handleClearExpressBill = async () => {
+    setExpressBill([]);
+    setExpressBillFileName('');
+    await clearExpressBill();
+  };
+
+  // 加载快递账单：优先已持久化数据
+  const loadExpressBillFromStore = async () => {
+    const saved = await loadExpressBill();
+    if (saved !== null) setExpressBill(saved);
+  };
+
   // 初始加载
   useEffect(() => {
     // 成本配置：服务器优先加载（聚水潭式资料库），失败回退 localStorage
@@ -176,12 +237,34 @@ export default function Dashboard() {
 
     loadSalesData();
     loadMarketingDataFromStore();
+    loadExpressBillFromStore();
   }, []);
 
   // 成本变更处理（localStorage + 服务器双写持久化）
   const handleCostChange = useCallback((newCostConfig: DetailedCostConfig) => {
     setCostConfig(newCostConfig);
     saveCostConfig(newCostConfig);
+  }, []);
+
+  // AI 通过 MCP 远程写入成本配置后，网页端定时拉取服务器数据自动同步
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await fetch('/api/config/cost', { method: 'GET' });
+        if (!res.ok) return;
+        const remote = (await res.json()) as DetailedCostConfig | null;
+        if (!remote || typeof remote !== 'object') return;
+        // 与页面当前配置一致则跳过（避免覆盖用户正在编辑的表单）
+        const remoteStr = JSON.stringify(remote);
+        setCostConfig(prev => {
+          if (JSON.stringify(prev) === remoteStr) return prev;
+          return remote;
+        });
+      } catch {
+        // 服务器不可用（本地开发未起 MCP/数据服务）时静默跳过
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
   // 定价默认取导入销售数据的平均客单价：仅对未设置定价的规格自动预填，不覆盖用户已填值
@@ -257,25 +340,25 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* 顶部导航栏 */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-[1920px] mx-auto px-6 py-4">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-[1920px] mx-auto px-4 py-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                <LayoutDashboard className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-500/25">
+                <LayoutDashboard className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-slate-900">电商数据分析仪表板</h1>
-                <p className="text-[13px] text-slate-500">支持销售数据与推广数据分析 | 成本输入与利润计算</p>
+                <h1 className="text-[14px] font-bold text-slate-900 leading-tight">电商数据分析仪表板</h1>
+                <p className="text-[12px] text-slate-500 leading-tight">支持销售数据与推广数据分析 | 成本输入与利润计算</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
               {/* 刷新按钮 */}
               <button
                 onClick={loadSalesData}
                 title="重新载入已保存的数据（本地/服务器）"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[13px] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[12px] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 刷新数据
@@ -283,10 +366,10 @@ export default function Dashboard() {
 
               <label
                 title="支持多次上传、多店铺/多日期段累计导入，自动按订单号去重并持久化保存"
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[13px] transition-colors cursor-pointer shadow-sm"
+                className={uploadButtonClass}
               >
                 <Upload className="w-4 h-4" />
-                上传销售 CSV
+                上传销售数据
                 <input
                   type="file"
                   accept=".csv,.txt"
@@ -297,10 +380,10 @@ export default function Dashboard() {
 
               <label
                 title="推广数据表下载：拼多多推广后台 → 报表/数据 → 导出报表（支持 Excel/CSV）。支持多次上传累计导入，自动去重并持久化"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[13px] transition-colors cursor-pointer"
+                className={uploadButtonClass}
               >
-                <CircleHelp className="w-4 h-4" />
-                推广数据
+                <Megaphone className="w-4 h-4" />
+                上传推广数据
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv,.txt"
@@ -309,16 +392,30 @@ export default function Dashboard() {
                 />
               </label>
 
+              <label
+                title="上传快递公司对账单：支持 Excel/CSV。系统按运单号匹配订单，自动汇总各 SKU 单件快递费并核算总快递成本"
+                className={uploadButtonClass}
+              >
+                <Truck className="w-4 h-4" />
+                上传快递账单
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.txt"
+                  className="hidden"
+                  onChange={handleExpressBillFileUpload}
+                />
+              </label>
+
               <button
                 onClick={handleClearAllData}
                 title="清空已导入的销售订单与推广数据（成本配置不受影响）"
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[13px] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[12px] transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
                 清空数据
               </button>
 
-              <div className="text-[13px] text-slate-500">
+              <div className="text-[12px] text-slate-500">
                 更新: {new Date().toLocaleDateString('zh-CN')}
               </div>
             </div>
@@ -327,9 +424,9 @@ export default function Dashboard() {
       </header>
 
       {/* 数据状态栏 */}
-      <div className="max-w-[1920px] mx-auto px-6 pt-4 space-y-3">
+      <div className="max-w-[1920px] mx-auto px-4 pt-3 space-y-2">
         {/* 商品ID搜索栏 */}
-        <div className="bg-white rounded-xl px-4 py-3 border border-slate-200 flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-white rounded-lg px-3 py-2 border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -380,22 +477,22 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-slate-200 flex-wrap gap-3">
-          <div className="flex items-center gap-6 text-[13px]">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-emerald-600" />
+        <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-200 flex-wrap gap-2">
+          <div className="flex items-center gap-4 text-[12px]">
+            <div className="flex items-center gap-1.5">
+              <ShoppingCart className="w-3.5 h-3.5 text-emerald-600" />
               <span className="text-slate-500">
                 销售订单: <strong className="text-slate-900">{filteredOrders.length}</strong> 条
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-cyan-600" />
+            <div className="flex items-center gap-1.5">
+              <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600" />
               <span className="text-slate-500">
                 商品规格: <strong className="text-slate-900">{filteredSummaries.length}</strong> 个
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Megaphone className="w-4 h-4 text-purple-600" />
+            <div className="flex items-center gap-1.5">
+              <Megaphone className="w-3.5 h-3.5 text-emerald-600" />
               <span className="text-slate-500">
                 推广记录: <strong className="text-slate-900">{filteredMarketingData.length}</strong> 条
               </span>
@@ -403,16 +500,16 @@ export default function Dashboard() {
           </div>
 
           {/* 时间筛选 + 快速跳转按钮 */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* 时间筛选 */}
-            <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 border border-slate-200">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 ml-1.5" />
+            <div className="flex items-center gap-1.5 bg-slate-100 rounded-md p-0.5 border border-slate-200">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 ml-1" />
               <div className="flex gap-0.5">
                 {timeRangeOptions.map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => setTimeRange(opt.value)}
-                    className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
+                    className={`px-2.5 py-1 rounded text-[12px] transition-colors ${
                       timeRange === opt.value
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-500 hover:text-slate-900 hover:bg-white'
@@ -425,7 +522,7 @@ export default function Dashboard() {
             </div>
 
             {/* 快速跳转按钮 */}
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-1 flex-wrap">
               {([
                 { tab: 'product', label: '单品明细' },
                 { tab: 'sku', label: 'SKU明细' },
@@ -434,12 +531,13 @@ export default function Dashboard() {
                 { tab: 'cost', label: '利润计算' },
                 { tab: 'marketing', label: '营销数据' },
                 { tab: 'refund', label: '退款分析' },
+                { tab: 'expressBill', label: '快递账单' },
                 { tab: 'advice', label: '智能建议' },
               ] as const).map(({ tab, label }) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[12px] transition-colors ${
                     activeTab === tab
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'bg-white border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -454,7 +552,7 @@ export default function Dashboard() {
       </div>
 
       {/* 主内容区 */}
-      <main className="max-w-[1920px] mx-auto px-6 py-8">
+      <main className="max-w-[1920px] mx-auto px-4 py-4">
         {activeTab === 'sku' && (
           <SkuDetail
             summaries={filteredSummaries}
@@ -511,6 +609,17 @@ export default function Dashboard() {
           <RefundAnalysis orders={filteredOrders} />
         )}
 
+        {activeTab === 'expressBill' && (
+          <ExpressBillAnalysis
+            billRecords={expressBill}
+            orders={filteredOrders}
+            costConfig={costConfig}
+            onCostChange={handleCostChange}
+            onClearBill={handleClearExpressBill}
+            fileName={expressBillFileName}
+          />
+        )}
+
         {activeTab === 'advice' && (
           <AdviceCenter
             orders={filteredOrders}
@@ -523,8 +632,8 @@ export default function Dashboard() {
       </main>
 
       {/* 底部信息 */}
-      <footer className="mt-8 py-6 border-t border-slate-200 text-center">
-        <p className="text-[13px] text-slate-500">
+      <footer className="mt-4 py-3 border-t border-slate-200 text-center">
+        <p className="text-[12px] text-slate-500">
           电商数据分析仪表板 | 支持多数据源导入 | 实时计算成本与利润
         </p>
       </footer>

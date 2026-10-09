@@ -67,7 +67,7 @@ interface OrderOverviewProps {
  */
 const getProfitRateColor = (rate: number): string => {
   if (rate >= 15) return 'text-emerald-600';
-  if (rate >= 5) return 'text-cyan-600';
+  if (rate >= 5) return 'text-emerald-600';
   if (rate >= 0) return 'text-amber-600';
   return 'text-red-600';
 };
@@ -94,7 +94,7 @@ const getPriceSuggestion = (
   if (profitRate < 15) {
     return {
       text: '可测试涨价3%',
-      color: 'text-cyan-600 bg-cyan-50 border-cyan-200',
+      color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
     };
   }
   return {
@@ -154,6 +154,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 }) => {
   // 分析维度：sku=按规格逐SKU分析，product=按商品ID汇总分析
   const [dimension, setDimension] = useState<SkuDetailDimension>('sku');
+
+  // BCG 四象限：点击卡片展开该象限的完整商品列表
+  const [expandedQuadrant, setExpandedQuadrant] = useState<'star' | 'cashCow' | 'question' | 'dog' | null>(null);
 
   // 当前维度下的汇总数据（单品维度由 SKU 汇总聚合而来）
   const activeSummaries = useMemo(
@@ -360,7 +363,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       title: '总销售额',
       value: formatAmount(totalSales),
       icon: DollarSign,
-      gradient: 'from-emerald-500 to-teal-600',
+      gradient: 'from-emerald-500 to-emerald-600',
       bgColor: 'bg-emerald-50',
       changeRate: getComparison('销售额'),
     },
@@ -368,56 +371,56 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       title: '总成本',
       value: formatAmount(healthMetrics.totalCost),
       icon: Wallet,
-      gradient: 'from-orange-500 to-amber-600',
-      bgColor: 'bg-orange-50',
+      gradient: 'from-amber-500 to-amber-600',
+      bgColor: 'bg-amber-50',
       changeRate: null,
     },
     {
       title: '总净利润',
       value: `${healthMetrics.totalProfit >= 0 ? '+' : ''}${formatAmount(healthMetrics.totalProfit)}`,
       icon: healthMetrics.totalProfit >= 0 ? TrendingUp : TrendingDown,
-      gradient: healthMetrics.totalProfit >= 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600',
-      bgColor: healthMetrics.totalProfit >= 0 ? 'bg-green-50' : 'bg-red-50',
+      gradient: healthMetrics.totalProfit >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600',
+      bgColor: healthMetrics.totalProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50',
       changeRate: null,
     },
     {
       title: '整体利润率',
       value: `${healthMetrics.overallProfitRate >= 0 ? '+' : ''}${healthMetrics.overallProfitRate.toFixed(2)}%`,
       icon: PieChartIcon,
-      gradient: 'from-cyan-500 to-blue-600',
-      bgColor: 'bg-cyan-50',
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
       changeRate: getComparison('利润率'),
     },
     {
       title: '总订单数',
       value: totalOrders.toLocaleString(),
       icon: ShoppingCart,
-      gradient: 'from-blue-500 to-indigo-600',
-      bgColor: 'bg-blue-50',
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
       changeRate: getComparison('订单数'),
     },
     {
       title: '总销量',
       value: totalQuantity.toLocaleString(),
       icon: Package,
-      gradient: 'from-purple-500 to-pink-600',
-      bgColor: 'bg-purple-50',
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
       changeRate: getComparison('销量'),
     },
     {
       title: '平均客单价',
       value: formatAmount(averageOrderValue),
       icon: TrendingUp,
-      gradient: 'from-orange-500 to-red-600',
-      bgColor: 'bg-orange-50',
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
       changeRate: getComparison('平均客单价'),
     },
     {
       title: '推广ROI',
       value: currentROI > 0 ? `${currentROI.toFixed(2)}` : '—',
       icon: Megaphone,
-      gradient: 'from-violet-500 to-purple-600',
-      bgColor: 'bg-violet-50',
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
       changeRate: getComparison('推广ROI'),
     },
   ];
@@ -609,9 +612,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
   }, [dailyTrendData]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* 维度切换 */}
-      <div className="bg-white rounded-xl px-4 py-3 border border-slate-200 flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-white rounded-xl px-3 py-2 border border-slate-200 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[13px] text-slate-500">分析维度</span>
           <div className="flex gap-0.5 bg-slate-100 rounded-lg p-1 border border-slate-200">
@@ -655,42 +658,42 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 
       {/* 关键预警区 */}
       {(alerts.lossSkus.length > 0 || alerts.decliningSkus.length > 0 || alerts.lowProfitHighVolume.length > 0) && (
-        <div className="bg-white rounded-xl p-5 border border-slate-200">
-          <div className="flex items-center gap-2 mb-3">
-            <Bell className="w-5 h-5 text-yellow-600" />
-            <h3 className="text-base font-semibold text-slate-900">关键预警</h3>
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Bell className="w-4 h-4 text-amber-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">关键预警</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {alerts.lossSkus.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="p-2 bg-red-100 rounded-lg">
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                <div className="p-1.5 bg-red-100 rounded-md">
                   <TrendingDown className="w-4 h-4 text-red-600" />
                 </div>
                 <div>
                   <p className="text-[13px] font-semibold text-red-600">{alerts.lossSkus.length} 个亏损{dimLabel}</p>
-                  <p className="text-[13px] text-slate-500">需立即止亏：核成本或涨价</p>
+                  <p className="text-[12px] text-slate-500">需立即止亏：核成本或涨价</p>
                 </div>
               </div>
             )}
             {alerts.decliningSkus.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <ArrowDown className="w-4 h-4 text-yellow-600" />
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="p-1.5 bg-amber-100 rounded-md">
+                  <ArrowDown className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-yellow-600">{alerts.decliningSkus.length} 个衰退{dimLabel}</p>
-                  <p className="text-[13px] text-slate-500">销量持续下降，关注库存与推广</p>
+                  <p className="text-[13px] font-semibold text-amber-600">{alerts.decliningSkus.length} 个衰退{dimLabel}</p>
+                  <p className="text-[12px] text-slate-500">销量持续下降，关注库存与推广</p>
                 </div>
               </div>
             )}
             {alerts.lowProfitHighVolume.length > 0 && (
-              <div className="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-orange-600" />
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="p-1.5 bg-amber-100 rounded-md">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-orange-600">{alerts.lowProfitHighVolume.length} 个低利润高销量{dimLabel}</p>
-                  <p className="text-[13px] text-slate-500">利润率&lt;5%但销量高，建议优化成本</p>
+                  <p className="text-[13px] font-semibold text-amber-600">{alerts.lowProfitHighVolume.length} 个低利润高销量{dimLabel}</p>
+                  <p className="text-[12px] text-slate-500">利润率&lt;5%但销量高，建议优化成本</p>
                 </div>
               </div>
             )}
@@ -699,9 +702,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       )}
 
       {/* 经营健康度卡片 */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <h2 className="text-base font-bold text-slate-900 mb-6">经营健康度</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+      <div className="bg-white rounded-xl p-3 border border-slate-200">
+        <h2 className="text-[13px] font-bold text-slate-900 mb-2">经营健康度</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-2">
           {metrics.map((metric) => {
             const Icon = metric.icon;
             const changeRate = metric.changeRate;
@@ -711,38 +714,35 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
             return (
               <div
                 key={metric.title}
-                className={`relative overflow-hidden rounded-lg ${metric.bgColor} p-4 border border-slate-200`}
+                className={`relative overflow-hidden rounded-lg ${metric.bgColor} px-2.5 py-2 border border-slate-200`}
               >
-                <div
-                  className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${metric.gradient} opacity-20 rounded-full blur-2xl -translate-y-6 translate-x-6`}
-                />
-                <div className="relative z-10 flex items-start justify-between">
-                  <div className="space-y-1.5">
-                    <p className="text-[13px] text-slate-500 font-medium">
+                <div className="relative z-10 flex items-center justify-between gap-1.5">
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-slate-500 font-medium truncate">
                       {metric.title}
                     </p>
-                    <p className="text-base font-bold text-slate-900">
+                    <p className="text-[14px] font-bold text-slate-900 truncate">
                       {metric.value}
                     </p>
                     {hasComparison && (
-                      <div className="flex items-center gap-1 text-[13px]">
+                      <div className="flex items-center gap-1 text-[12px]">
                         <span className="text-slate-400">环比</span>
                         <span
                           className={`flex items-center gap-0.5 font-medium ${
                             isUp ? 'text-emerald-600' : isDown ? 'text-red-600' : 'text-slate-500'
                           }`}
                         >
-                          {isUp && <ArrowUp className="w-3 h-3" />}
-                          {isDown && <ArrowDown className="w-3 h-3" />}
+                          {isUp && <ArrowUp className="w-2.5 h-2.5" />}
+                          {isDown && <ArrowDown className="w-2.5 h-2.5" />}
                           {changeRate > 0 ? '+' : ''}{changeRate}%
                         </span>
                       </div>
                     )}
                   </div>
                   <div
-                    className={`p-2 rounded-lg bg-gradient-to-br ${metric.gradient} shadow-lg`}
+                    className={`p-1.5 rounded-md bg-gradient-to-br ${metric.gradient} shadow-sm flex-shrink-0`}
                   >
-                    <Icon className="w-5 h-5 text-white" />
+                    <Icon className="w-4 h-4 text-white" />
                   </div>
                 </div>
               </div>
@@ -753,39 +753,39 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 
       {/* 科学分析：ABC 分类 + 集中度 */}
       {abcAnalysis && (
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-6">
-            <PieChartIcon className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-base font-semibold text-slate-900">{dimLabel}结构科学分析</h3>
-            <span className="text-[13px] text-slate-500">
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChartIcon className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}结构科学分析</h3>
+            <span className="text-[12px] text-slate-500">
               （帕累托 ABC 分类 + 销售额集中度）
             </span>
           </div>
 
           {/* ABC 三档卡片 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
             {([
-              { key: 'A', label: 'A 类（核心）', desc: '累计销售额前 70%', color: 'text-emerald-600', bar: 'from-emerald-500 to-teal-400', stat: abcAnalysis.A },
-              { key: 'B', label: 'B 类（腰部）', desc: '累计 70%–90%', color: 'text-cyan-600', bar: 'from-cyan-500 to-sky-400', stat: abcAnalysis.B },
+              { key: 'A', label: 'A 类（核心）', desc: '累计销售额前 70%', color: 'text-emerald-600', bar: 'from-emerald-500 to-emerald-400', stat: abcAnalysis.A },
+              { key: 'B', label: 'B 类（腰部）', desc: '累计 70%–90%', color: 'text-emerald-500', bar: 'from-emerald-400 to-emerald-300', stat: abcAnalysis.B },
               { key: 'C', label: 'C 类（长尾）', desc: '累计 90% 之后', color: 'text-slate-500', bar: 'from-slate-400 to-slate-300', stat: abcAnalysis.C },
             ] as const).map(tier => (
-              <div key={tier.key} className="rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center justify-between mb-3">
+              <div key={tier.key} className="rounded-lg border border-slate-200 p-2.5">
+                <div className="flex items-center justify-between mb-1.5">
                   <span className={`text-[13px] font-semibold ${tier.color}`}>{tier.label}</span>
-                  <span className="text-[13px] text-slate-400">{tier.stat.count}个 · {tier.stat.countShare.toFixed(1)}%</span>
+                  <span className="text-[12px] text-slate-400">{tier.stat.count}个 · {tier.stat.countShare.toFixed(1)}%</span>
                 </div>
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-base font-bold text-slate-900">{tier.stat.salesShare.toFixed(1)}%</span>
-                  <span className="text-[13px] text-slate-500">销售额占比</span>
+                <div className="flex items-baseline gap-2 mb-1.5">
+                  <span className="text-[14px] font-bold text-slate-900">{tier.stat.salesShare.toFixed(1)}%</span>
+                  <span className="text-[12px] text-slate-500">销售额占比</span>
                 </div>
-                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden mb-3">
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-1.5">
                   <div
                     className={`h-full bg-gradient-to-r ${tier.bar} rounded-full transition-all duration-500`}
                     style={{ width: `${tier.stat.salesShare}%` }}
                   />
                 </div>
-                <p className="text-[13px] text-slate-400">{tier.desc}</p>
-                <p className="text-[13px] text-slate-500 mt-1">
+                <p className="text-[12px] text-slate-400">{tier.desc}</p>
+                <p className="text-[12px] text-slate-500 mt-0.5">
                   平均利润率
                   <span className={`ml-1 font-mono font-semibold ${getProfitRateColor(tier.stat.avgProfitRate)}`}>
                     {tier.stat.avgProfitRate >= 0 ? '+' : ''}{tier.stat.avgProfitRate.toFixed(2)}%
@@ -796,37 +796,37 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
           </div>
 
           {/* 集中度指标 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {([
               { label: 'CR3 前三集中度', value: `${abcAnalysis.cr3.toFixed(1)}%`, hint: '前3名销售额占比' },
               { label: 'CR5 前五集中度', value: `${abcAnalysis.cr5.toFixed(1)}%`, hint: '前5名销售额占比' },
               { label: 'HHI 赫芬达尔指数', value: abcAnalysis.hhi.toFixed(0), hint: hhiLevel(abcAnalysis.hhi).text, hintColor: hhiLevel(abcAnalysis.hhi).color },
               { label: 'CV 销售额波动率', value: abcAnalysis.cv.toFixed(2), hint: '越高说明越依赖少数爆款' },
             ] as const).map(item => (
-              <div key={item.label} className="rounded-lg bg-slate-50 border border-slate-200 p-4">
-                <p className="text-[13px] text-slate-500 mb-1">{item.label}</p>
-                <p className="text-base font-bold text-slate-900 font-mono">{item.value}</p>
-                <p className={`text-[13px] mt-1 ${'hintColor' in item ? item.hintColor : 'text-slate-400'}`}>{item.hint}</p>
+              <div key={item.label} className="rounded-lg bg-slate-50 border border-slate-200 p-2.5">
+                <p className="text-[12px] text-slate-500 mb-0.5">{item.label}</p>
+                <p className="text-[14px] font-bold text-slate-900 font-mono">{item.value}</p>
+                <p className={`text-[12px] mt-0.5 ${'hintColor' in item ? item.hintColor : 'text-slate-400'}`}>{item.hint}</p>
               </div>
             ))}
           </div>
 
           {/* BCG 波士顿矩阵 */}
           {bcgAnalysis && (
-            <div className="mt-8 pt-6 border-t border-slate-200">
-              <div className="flex items-center gap-2 mb-1">
-                <Target className="w-4 h-4 text-indigo-600" />
+            <div className="mt-4 pt-3 border-t border-slate-200">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Target className="w-4 h-4 text-emerald-600" />
                 <span className="text-[13px] font-semibold text-slate-700">BCG 波士顿矩阵</span>
-                <span className="text-[13px] text-slate-400">（份额 × 增长率四象限）</span>
+                <span className="text-[12px] text-slate-400">（份额 × 增长率四象限）</span>
               </div>
-              <p className="text-[13px] text-slate-400 mb-4">
+              <p className="text-[12px] text-slate-400 mb-2">
                 横轴为相对份额（本项销售额 ÷ 平均销售额，&gt;1 为高份额），纵轴为销量趋势增长率（每期相对变化 %）。
               </p>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {/* 散点图 */}
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <ResponsiveContainer width="100%" height={280}>
+                <div className="rounded-lg border border-slate-200 p-2">
+                  <ResponsiveContainer width="100%" height={240}>
                     <ScatterChart margin={{ top: 10, right: 16, bottom: 24, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis
@@ -865,90 +865,177 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                           );
                         }}
                       />
-                      <Scatter data={bcgAnalysis.scatterPoints} fill="#6366f1" fillOpacity={0.6} />
+                      <Scatter data={bcgAnalysis.scatterPoints} fill="#10b981" fillOpacity={0.6} />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </div>
 
-                {/* 四象限说明 */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* 四象限说明：点击卡片查看该象限全部商品 */}
+                <div className="grid grid-cols-2 gap-2">
                   {([
                     { key: 'star', label: '明星', en: 'Star', desc: '高份额·高增长', tip: '加大投入，巩固领先', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-                    { key: 'cashCow', label: '金牛', en: 'Cash Cow', desc: '高份额·低增长', tip: '稳定收割，控制成本', color: 'text-cyan-700', bg: 'bg-cyan-50', border: 'border-cyan-200' },
+                    { key: 'cashCow', label: '金牛', en: 'Cash Cow', desc: '高份额·低增长', tip: '稳定收割，控制成本', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
                     { key: 'question', label: '问题', en: 'Question', desc: '低份额·高增长', tip: '择优扶持，谨慎投入', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
                     { key: 'dog', label: '瘦狗', en: 'Dog', desc: '低份额·低增长', tip: '考虑收缩或汰换', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
                   ] as const).map(q => {
                     const list = bcgAnalysis.quadrants[q.key];
                     const top = [...list].sort((a, b) => b.sales - a.sales).slice(0, 3);
                     return (
-                      <div key={q.key} className={`rounded-lg border ${q.border} ${q.bg} p-3`}>
-                        <div className="flex items-center justify-between mb-1">
+                      <button
+                        key={q.key}
+                        type="button"
+                        onClick={() => setExpandedQuadrant(q.key)}
+                        className={`rounded-lg border ${q.border} ${q.bg} p-2 text-left transition-shadow hover:shadow-md hover:ring-1 hover:ring-slate-300 cursor-pointer`}
+                        title="点击查看该象限全部商品"
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
                           <span className={`text-[13px] font-semibold ${q.color}`}>
                             {q.label} <span className="font-normal text-slate-400">{q.en}</span>
                           </span>
-                          <span className="text-[13px] text-slate-500">{list.length}个</span>
+                          <span className="text-[12px] text-slate-500">{list.length}个 ↗</span>
                         </div>
-                        <p className="text-[13px] text-slate-400 mb-2">{q.desc} · {q.tip}</p>
+                        <p className="text-[12px] text-slate-400 mb-1">{q.desc} · {q.tip}</p>
                         <div className="space-y-0.5">
                           {top.map(p => (
-                            <p key={p.summary.规格} className="text-[13px] text-slate-600 truncate" title={p.summary.规格}>
+                            <p key={p.summary.规格} className="text-[12px] text-slate-600 truncate" title={p.summary.规格}>
                               {p.summary.规格}
                             </p>
                           ))}
-                          {list.length === 0 && <p className="text-[13px] text-slate-400">—</p>}
+                          {list.length === 0 && <p className="text-[12px] text-slate-400">—</p>}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
+
+                {/* 象限商品明细弹窗 */}
+                {expandedQuadrant && (() => {
+                  const meta = {
+                    star: { label: '明星', en: 'Star', desc: '高份额·高增长', tip: '加大投入，巩固领先', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+                    cashCow: { label: '金牛', en: 'Cash Cow', desc: '高份额·低增长', tip: '稳定收割，控制成本', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+                    question: { label: '问题', en: 'Question', desc: '低份额·高增长', tip: '择优扶持，谨慎投入', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+                    dog: { label: '瘦狗', en: 'Dog', desc: '低份额·低增长', tip: '考虑收缩或汰换', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
+                  }[expandedQuadrant];
+                  const list = [...bcgAnalysis.quadrants[expandedQuadrant]].sort((a, b) => b.sales - a.sales);
+                  return (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+                      onClick={() => setExpandedQuadrant(null)}
+                    >
+                      <div
+                        className="bg-white rounded-xl border border-slate-200 shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className={`flex items-center justify-between px-3 py-2 border-b ${meta.border} ${meta.bg} rounded-t-xl`}>
+                          <div>
+                            <span className={`text-[13px] font-semibold ${meta.color}`}>
+                              {meta.label} <span className="font-normal text-slate-400">{meta.en}</span>
+                            </span>
+                            <span className="ml-2 text-[13px] text-slate-500">{meta.desc} · {meta.tip}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedQuadrant(null)}
+                            className="text-slate-400 hover:text-slate-600 text-[20px] leading-none px-1"
+                            aria-label="关闭"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="overflow-auto">
+                          <table className="w-full min-w-[640px]">
+                            <thead className="sticky top-0 bg-slate-100">
+                              <tr className="border-b border-slate-200">
+                                <th className="px-3 py-2 text-left text-[12px] font-medium text-slate-500">{dimLabel}</th>
+                                <th className="px-3 py-2 text-right text-[12px] font-medium text-slate-500">销售额</th>
+                                <th className="px-3 py-2 text-right text-[12px] font-medium text-slate-500">相对份额</th>
+                                <th className="px-3 py-2 text-right text-[12px] font-medium text-slate-500">增长率</th>
+                                <th className="px-3 py-2 text-right text-[12px] font-medium text-slate-500">利润率</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {list.map(p => (
+                                <tr key={p.summary.规格} className="hover:bg-slate-50 transition-colors">
+                                  <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[280px] truncate" title={p.summary.规格}>
+                                    {p.summary.规格}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[13px] text-right font-mono text-slate-700">
+                                    {formatAmount(p.sales)}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-[13px] text-right font-mono text-slate-700">
+                                    {p.share.toFixed(2)}x
+                                  </td>
+                                  <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${p.growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    {p.growth >= 0 ? '+' : ''}{p.growth.toFixed(1)}%
+                                  </td>
+                                  <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(p.profitRate)}`}>
+                                    {p.profitRate.toFixed(2)}%
+                                  </td>
+                                </tr>
+                              ))}
+                              {list.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="px-3 py-6 text-center text-[13px] text-slate-400">该象限暂无商品</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="px-3 py-2 border-t border-slate-200 text-[12px] text-slate-400">
+                          共 {list.length} 个{dimLabel} · 相对份额 = 该项销售额 / 平均销售额（≥1 为高份额）
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
 
           {/* C 类汰换候选 */}
           {abcAnalysis.eliminationCandidates.length > 0 && (
-            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+              <div className="flex items-center gap-2 mb-2">
                 <Trash2 className="w-4 h-4 text-amber-600" />
                 <span className="text-[13px] font-semibold text-amber-700">
                   C 类汰换候选（{abcAnalysis.eliminationCandidates.length}个）
                 </span>
-                <span className="text-[13px] text-amber-600/80">
+                <span className="text-[12px] text-amber-600/80">
                   · 长尾且利润率&lt;5%，建议评估下架或清仓
                 </span>
               </div>
-              <div className="overflow-x-auto rounded-lg border border-amber-200 bg-white">
+              <div className="overflow-auto rounded-lg border border-amber-200 bg-white max-h-[300px]">
                 <table className="w-full min-w-[640px]">
-                  <thead>
+                  <thead className="sticky top-0 z-10">
                     <tr className="border-b border-amber-200 bg-amber-50">
-                      <th className="px-4 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
-                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
-                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">销量</th>
-                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">净利润</th>
-                      <th className="px-4 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                      <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
+                      <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                      <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                      <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销量</th>
+                      <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">净利润</th>
+                      <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-100">
                     {abcAnalysis.eliminationCandidates.slice(0, 10).map(item => (
                       <tr key={item.规格} className="hover:bg-amber-50/50 transition-colors">
-                        <td className="px-4 py-2.5 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.规格}>
+                        <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.规格}>
                           {item.规格}
                         </td>
-                        <td className="px-4 py-2.5 text-[13px] text-right font-mono text-slate-700">
+                        <td className="px-3 py-1.5 text-[13px] text-right font-mono text-slate-700">
                           {formatAmount(item.销售额)}
                         </td>
-                        <td className="px-4 py-2.5 text-[13px] text-right font-mono text-orange-600">
+                        <td className="px-3 py-1.5 text-[13px] text-right font-mono text-amber-600">
                           {formatAmount(item.总成本)}
                         </td>
-                        <td className="px-4 py-2.5 text-[13px] text-right font-mono text-slate-700">
+                        <td className="px-3 py-1.5 text-[13px] text-right font-mono text-slate-700">
                           {formatNumber(item.销量)}
                         </td>
-                        <td className={`px-4 py-2.5 text-[13px] text-right font-mono ${getProfitRateColor(item.净利润)}`}>
+                        <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.净利润)}`}>
                           {item.净利润 >= 0 ? '+' : ''}
                           {formatAmount(item.净利润)}
                         </td>
-                        <td className={`px-4 py-2.5 text-[13px] text-right font-mono ${getProfitRateColor(item.利润率)}`}>
+                        <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.利润率)}`}>
                           {item.利润率 >= 0 ? '+' : ''}
                           {item.利润率.toFixed(2)}%
                         </td>
@@ -958,14 +1045,14 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 </table>
               </div>
               {abcAnalysis.eliminationCandidates.length > 10 && (
-                <p className="mt-2 text-[13px] text-amber-600/80">
+                <p className="mt-1.5 text-[12px] text-amber-600/80">
                   仅显示利润率最低的 10 个，共 {abcAnalysis.eliminationCandidates.length} 个候选。
                 </p>
               )}
             </div>
           )}
 
-          <div className="mt-4 pt-4 border-t border-slate-200 text-[13px] text-slate-400 leading-relaxed">
+          <div className="mt-3 pt-2 border-t border-slate-200 text-[12px] text-slate-400 leading-relaxed">
             <p>
               <span className="text-slate-500 font-medium">口径说明：</span>
               ABC 按销售额从高到低累计占比划分（A≤70%、B≤90%、C&gt;90%）；CR3/CR5 为前 3/5 名销售额集中度；
@@ -983,13 +1070,13 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 
       {/* 日销售趋势图 */}
       {dailyTrendData.length > 0 && (
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-6">
-            <LineChartIcon className="w-5 h-5 text-cyan-600" />
-            <h3 className="text-base font-semibold text-slate-900">日销售趋势</h3>
-            <span className="text-[13px] text-slate-500">（{dailyTrendData.length}天数据）</span>
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <LineChartIcon className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">日销售趋势</h3>
+            <span className="text-[12px] text-slate-500">（{dailyTrendData.length}天数据）</span>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={trendEnhanced ? trendEnhanced.chartData : dailyTrendData}>
               <defs>
                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
@@ -997,8 +1084,8 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#64748b" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#64748b" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -1009,7 +1096,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 tickFormatter={(v: string) => v.slice(5)}
               />
               <YAxis yAxisId="left" stroke="#10b981" fontSize={11} />
-              <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" fontSize={11} />
+              <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={11} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: '#ffffff',
@@ -1034,7 +1121,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 yAxisId="right"
                 type="monotone"
                 dataKey="销量"
-                stroke="#3b82f6"
+                stroke="#64748b"
                 strokeWidth={2}
                 fill="url(#volumeGradient)"
                 name="销量 (件)"
@@ -1058,10 +1145,10 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   yAxisId="left"
                   type="monotone"
                   dataKey="预测"
-                  stroke="#8b5cf6"
+                  stroke="#059669"
                   strokeWidth={2}
                   strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#8b5cf6' }}
+                  dot={{ r: 3, fill: '#059669' }}
                   connectNulls
                   name="预测 (¥)"
                 />
@@ -1071,7 +1158,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   yAxisId="left"
                   type="monotone"
                   dataKey="预测上界"
-                  stroke="#c4b5fd"
+                  stroke="#a7f3d0"
                   strokeWidth={1}
                   strokeDasharray="2 3"
                   dot={false}
@@ -1085,7 +1172,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   yAxisId="left"
                   type="monotone"
                   dataKey="预测下界"
-                  stroke="#c4b5fd"
+                  stroke="#a7f3d0"
                   strokeWidth={1}
                   strokeDasharray="2 3"
                   dot={false}
@@ -1104,7 +1191,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                     x={point.日期}
                     y={a.value}
                     r={5}
-                    fill={a.type === 'high' ? '#ef4444' : '#f97316'}
+                    fill={a.type === 'high' ? '#ef4444' : '#f59e0b'}
                     stroke="#ffffff"
                     strokeWidth={2}
                   />
@@ -1115,28 +1202,28 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
 
           {/* 异常检测 + 预测摘要 */}
           {trendEnhanced && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
               {/* 异常日 */}
-              <div className="rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center gap-2 mb-2">
+              <div className="rounded-lg border border-slate-200 p-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
                   <Bell className="w-4 h-4 text-red-500" />
                   <span className="text-[13px] font-semibold text-slate-700">异常销售日</span>
-                  <span className="text-[13px] text-slate-400">（IQR 四分位距法，1.5×IQR）</span>
+                  <span className="text-[12px] text-slate-400">（IQR 四分位距法，1.5×IQR）</span>
                 </div>
                 {trendEnhanced.anomalies.length === 0 ? (
-                  <p className="text-[13px] text-slate-400">未检测到显著异常日，销售波动处于正常区间。</p>
+                  <p className="text-[12px] text-slate-400">未检测到显著异常日，销售波动处于正常区间。</p>
                 ) : (
-                  <div className="space-y-1.5 max-h-[132px] overflow-y-auto">
+                  <div className="space-y-1 max-h-[96px] overflow-y-auto">
                     {trendEnhanced.anomalies.map(a => {
                       const date = trendEnhanced.chartData[a.index]?.日期 || '';
                       return (
-                        <div key={`anomaly-row-${a.index}`} className="flex items-center justify-between text-[13px]">
+                        <div key={`anomaly-row-${a.index}`} className="flex items-center justify-between text-[12px]">
                           <span className="flex items-center gap-2">
                             <span
-                              className={`inline-block w-2 h-2 rounded-full ${a.type === 'high' ? 'bg-red-500' : 'bg-orange-500'}`}
+                              className={`inline-block w-2 h-2 rounded-full ${a.type === 'high' ? 'bg-red-500' : 'bg-amber-500'}`}
                             />
                             <span className="text-slate-600 font-mono">{date}</span>
-                            <span className={a.type === 'high' ? 'text-red-600' : 'text-orange-600'}>
+                            <span className={a.type === 'high' ? 'text-red-600' : 'text-amber-600'}>
                               {a.type === 'high' ? '暴涨' : '暴跌'}
                             </span>
                           </span>
@@ -1152,23 +1239,23 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
               </div>
 
               {/* 未来7天预测 */}
-              <div className="rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-4 h-4 text-violet-500" />
+              <div className="rounded-lg border border-slate-200 p-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
                   <span className="text-[13px] font-semibold text-slate-700">未来 7 天预测</span>
-                  <span className="text-[13px] text-slate-400">（最小二乘线性外推，95% 区间）</span>
+                  <span className="text-[12px] text-slate-400">（最小二乘线性外推，95% 区间）</span>
                 </div>
                 {trendEnhanced.forecast.length === 0 ? (
-                  <p className="text-[13px] text-slate-400">样本不足，暂无法预测。</p>
+                  <p className="text-[12px] text-slate-400">样本不足，暂无法预测。</p>
                 ) : (
                   <>
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-base font-bold text-slate-900 font-mono">
+                    <div className="flex items-baseline gap-2 mb-1.5">
+                      <span className="text-[14px] font-bold text-slate-900 font-mono">
                         {formatAmount(trendEnhanced.forecastTotal)}
                       </span>
-                      <span className="text-[13px] text-slate-500">预计合计销售额</span>
+                      <span className="text-[12px] text-slate-500">预计合计销售额</span>
                       <span
-                        className={`text-[13px] font-mono ${
+                        className={`text-[12px] font-mono ${
                           trendEnhanced.changeVsHist >= 0 ? 'text-emerald-600' : 'text-red-600'
                         }`}
                       >
@@ -1177,9 +1264,9 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                         <span className="text-slate-400 ml-1">vs 历史日均</span>
                       </span>
                     </div>
-                    <div className="space-y-1.5 max-h-[104px] overflow-y-auto">
+                    <div className="space-y-1 max-h-[80px] overflow-y-auto">
                       {trendEnhanced.forecast.map((f, i) => (
-                        <div key={`forecast-${f.step}`} className="flex items-center justify-between text-[13px]">
+                        <div key={`forecast-${f.step}`} className="flex items-center justify-between text-[12px]">
                           <span className="text-slate-500 font-mono">
                             D+{f.step} · {trendEnhanced.chartData[trendEnhanced.chartData.length - trendEnhanced.forecast.length + i]?.日期.slice(5) || ''}
                           </span>
@@ -1201,60 +1288,60 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       )}
 
       {/* SKU分类占比图 */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <PieChartIcon className="w-5 h-5 text-purple-600" />
-          <h3 className="text-base font-semibold text-slate-900">{dimLabel}分类占比</h3>
-          <span className="text-[13px] text-slate-500">（共{categoryStats.total}个有效{dimLabel}）</span>
+      <div className="bg-white rounded-xl p-3 border border-slate-200">
+        <div className="flex items-center gap-2 mb-2">
+          <PieChartIcon className="w-4 h-4 text-emerald-600" />
+          <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}分类占比</h3>
+          <span className="text-[12px] text-slate-500">（共{categoryStats.total}个有效{dimLabel}）</span>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-2">
           {/* 爆品进度条 */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-orange-600" />
+                <Flame className="w-4 h-4 text-amber-600" />
                 <span className="text-[13px] text-slate-700">爆品</span>
-                <span className="text-[13px] text-slate-500">{categoryStats.hot.count}个</span>
+                <span className="text-[12px] text-slate-500">{categoryStats.hot.count}个</span>
               </div>
-              <span className="text-[13px] font-semibold text-orange-600">{categoryStats.hot.percent.toFixed(1)}%</span>
+              <span className="text-[13px] font-semibold text-amber-600">{categoryStats.hot.percent.toFixed(1)}%</span>
             </div>
-            <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
                 style={{ width: `${categoryStats.hot.percent}%` }}
               />
             </div>
           </div>
           {/* 风险品进度条 */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-red-600" />
                 <span className="text-[13px] text-slate-700">风险品</span>
-                <span className="text-[13px] text-slate-500">{categoryStats.risk.count}个</span>
+                <span className="text-[12px] text-slate-500">{categoryStats.risk.count}个</span>
               </div>
               <span className="text-[13px] font-semibold text-red-600">{categoryStats.risk.percent.toFixed(1)}%</span>
             </div>
-            <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-red-500 to-rose-400 rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-red-500 to-red-400 rounded-full transition-all duration-500"
                 style={{ width: `${categoryStats.risk.percent}%` }}
               />
             </div>
           </div>
           {/* 衰退品进度条 */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <TrendingDown className="w-4 h-4 text-yellow-600" />
+                <TrendingDown className="w-4 h-4 text-amber-600" />
                 <span className="text-[13px] text-slate-700">衰退品</span>
-                <span className="text-[13px] text-slate-500">{categoryStats.declining.count}个</span>
+                <span className="text-[12px] text-slate-500">{categoryStats.declining.count}个</span>
               </div>
-              <span className="text-[13px] font-semibold text-yellow-600">{categoryStats.declining.percent.toFixed(1)}%</span>
+              <span className="text-[13px] font-semibold text-amber-600">{categoryStats.declining.percent.toFixed(1)}%</span>
             </div>
-            <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-all duration-500"
+                className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
                 style={{ width: `${categoryStats.declining.percent}%` }}
               />
             </div>
@@ -1263,40 +1350,40 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       </div>
 
       {/* SKU分类：爆品 / 风险品 / 衰退品 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         {/* 爆品 */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-4">
-            <Flame className="w-5 h-5 text-orange-600" />
-            <h3 className="text-base font-semibold text-slate-900">爆品</h3>
-            <span className="text-[13px] text-slate-500">
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Flame className="w-4 h-4 text-amber-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">爆品</h3>
+            <span className="text-[12px] text-slate-500">
               （{hotProducts.length}个 · 销售额≥中位数且盈利）
             </span>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-auto rounded-lg border border-slate-200 max-h-[320px]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-200 bg-slate-100">
-                  <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {hotProducts.length > 0 ? (
                   hotProducts.map((item) => (
                     <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-2.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
                         {item.规格}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.总成本)}
                       </td>
-                      <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         +{item.利润率.toFixed(2)}%
                       </td>
                     </tr>
@@ -1314,38 +1401,38 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
         </div>
 
         {/* 风险品 */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-4">
-            <ShieldAlert className="w-5 h-5 text-red-600" />
-            <h3 className="text-base font-semibold text-slate-900">风险品</h3>
-            <span className="text-[13px] text-slate-500">
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldAlert className="w-4 h-4 text-red-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">风险品</h3>
+            <span className="text-[12px] text-slate-500">
               （{riskProducts.length}个 · 非爆品，按销售额降序）
             </span>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-auto rounded-lg border border-slate-200 max-h-[320px]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-200 bg-slate-100">
-                  <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {riskProducts.length > 0 ? (
                   riskProducts.map((item) => (
                     <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-2.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
                         {item.规格}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.总成本)}
                       </td>
-                      <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         {item.利润率.toFixed(2)}%
                       </td>
                     </tr>
@@ -1363,38 +1450,38 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
         </div>
 
         {/* 衰退品 */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-4">
-            <TrendingDown className="w-5 h-5 text-yellow-600" />
-            <h3 className="text-base font-semibold text-slate-900">衰退品</h3>
-            <span className="text-[13px] text-slate-500">
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingDown className="w-4 h-4 text-amber-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">衰退品</h3>
+            <span className="text-[12px] text-slate-500">
               （{decliningProducts.length}个 · 趋势显著下降：归一化斜率≤-2% 且 R²≥0.3）
             </span>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-auto rounded-lg border border-slate-200 max-h-[320px]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-200 bg-slate-100">
-                  <th className="px-3 py-2.5 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">成本</th>
-                  <th className="px-3 py-2.5 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}名称</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {decliningProducts.length > 0 ? (
                   decliningProducts.map((item) => (
                     <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-2.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[160px] truncate" title={item.规格}>
                         {item.规格}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.总成本)}
                       </td>
-                      <td className={`px-3 py-2.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                         +{item.利润率.toFixed(2)}%
                       </td>
                     </tr>
@@ -1413,37 +1500,37 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       </div>
 
       {/* 表1: SKU销量趋势 */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <LineChartIcon className="w-5 h-5 text-cyan-600" />
-          <h3 className="text-base font-semibold text-slate-900">{dimLabel}销量趋势</h3>
-          <span className="text-[13px] text-slate-500">
-            （按销售额降序，折线图为日销量趋势）
+      <div className="bg-white rounded-xl p-3 border border-slate-200">
+        <div className="flex items-center gap-3 mb-3">
+          <LineChartIcon className="w-4 h-4 text-emerald-600" />
+          <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}销量趋势</h3>
+          <span className="text-[12px] text-slate-500">
+            （按销售额降序，折线图为日销量趋势，共 {skuTrendData.length} 项）
           </span>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-auto rounded-lg border border-slate-200 max-h-[420px]">
           <table className="w-full min-w-[900px]">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-100">
-                <th className="px-4 py-3 text-left text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">
                   {dimLabel}名称
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">
                   销售额
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">
                   成本
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">
                   销量
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">
                   订单数
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">
                   利润率
                 </th>
-                <th className="px-4 py-3 text-center text-[13px] font-medium text-slate-500">
+                <th className="px-3 py-2 text-center text-[13px] font-medium text-slate-500">
                   销量趋势
                 </th>
               </tr>
@@ -1455,31 +1542,31 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                     key={item.summary.规格}
                     className="hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-4 py-3 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.summary.规格}>
+                    <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.summary.规格}>
                       {item.summary.规格}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-emerald-600 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                       {formatAmount(item.summary.销售额)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-orange-600 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                       {formatAmount(item.summary.总成本)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-slate-700 text-right font-mono">
                       {formatNumber(item.summary.销量)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-slate-700 text-right font-mono">
                       {formatNumber(item.summary.订单数)}
                     </td>
-                    <td className={`px-4 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.summary.利润率)}`}>
+                    <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.summary.利润率)}`}>
                       {item.summary.利润率 >= 0 ? '+' : ''}
                       {item.summary.利润率.toFixed(2)}%
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <div className="flex justify-center">
                         <MiniLineChart
                           data={item.trend}
-                          width={140}
-                          height={36}
+                          width={120}
+                          height={28}
                           color={item.summary.利润率 >= 0 ? '#10b981' : '#ef4444'}
                         />
                       </div>
@@ -1499,63 +1586,63 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       </div>
 
       {/* 表2 & 表3: 并排显示 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         {/* 表2: SKU销售TOP */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-6">
-            <Trophy className="w-5 h-5 text-yellow-600" />
-            <h3 className="text-base font-semibold text-slate-900">{dimLabel}销售TOP10</h3>
-            <span className="text-[13px] text-slate-500">（按销售额排序）</span>
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Trophy className="w-4 h-4 text-amber-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}销售TOP10</h3>
+            <span className="text-[12px] text-slate-500">（按销售额排序）</span>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-auto rounded-lg border border-slate-200 max-h-[360px]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-200 bg-slate-100">
-                  <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">排名</th>
-                  <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销量</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">订单数</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">排名</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销量</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">订单数</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {salesTopData.length > 0 ? (
                   salesTopData.map((item, index) => (
                     <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[13px] font-bold ${
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[12px] font-bold ${
                           index === 0
-                            ? 'bg-yellow-100 text-yellow-600'
+                            ? 'bg-amber-100 text-amber-600'
                             : index === 1
                             ? 'bg-slate-200 text-slate-600'
                             : index === 2
-                            ? 'bg-orange-100 text-orange-600'
+                            ? 'bg-amber-100 text-amber-600'
                             : 'bg-slate-100 text-slate-400'
                         }`}>
                           {index + 1}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-slate-700 max-w-[180px] truncate" title={item.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[180px] truncate" title={item.规格}>
                         {item.规格}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.总成本)}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-slate-700 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 text-right font-mono">
                         {formatNumber(item.销量)}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-slate-700 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 text-right font-mono">
                         {formatNumber(item.订单数)}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={6} className="py-6 text-center text-slate-400 text-[13px]">
                       暂无数据
                     </td>
                   </tr>
@@ -1566,55 +1653,55 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
         </div>
 
         {/* 表3: SKU利润TOP */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3 mb-6">
-            <TrendingUp className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-base font-semibold text-slate-900">{dimLabel}利润TOP10</h3>
-            <span className="text-[13px] text-slate-500">（按净利润排序）</span>
+        <div className="bg-white rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}利润TOP10</h3>
+            <span className="text-[12px] text-slate-500">（按净利润排序）</span>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-auto rounded-lg border border-slate-200 max-h-[360px]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-200 bg-slate-100">
-                  <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">排名</th>
-                  <th className="px-3 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">净利润</th>
-                  <th className="px-3 py-3 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">排名</th>
+                  <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">净利润</th>
+                  <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {profitTopData.length > 0 ? (
                   profitTopData.map((item, index) => (
                     <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[13px] font-bold ${
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[12px] font-bold ${
                           index === 0
-                            ? 'bg-yellow-100 text-yellow-600'
+                            ? 'bg-amber-100 text-amber-600'
                             : index === 1
                             ? 'bg-slate-200 text-slate-600'
                             : index === 2
-                            ? 'bg-orange-100 text-orange-600'
+                            ? 'bg-amber-100 text-amber-600'
                             : 'bg-slate-100 text-slate-400'
                         }`}>
                           {index + 1}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-slate-700 max-w-[180px] truncate" title={item.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[180px] truncate" title={item.规格}>
                         {item.规格}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.销售额)}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.总成本)}
                       </td>
-                      <td className={`px-3 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.净利润)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.净利润)}`}>
                         {item.净利润 >= 0 ? '+' : ''}
                         {formatAmount(item.净利润)}
                       </td>
-                      <td className={`px-3 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.利润率)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.利润率)}`}>
                         {item.利润率 >= 0 ? '+' : ''}
                         {item.利润率.toFixed(2)}%
                       </td>
@@ -1622,7 +1709,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
+                    <td colSpan={6} className="py-6 text-center text-slate-400 text-[13px]">
                       暂无数据
                     </td>
                   </tr>
@@ -1634,45 +1721,45 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       </div>
 
       {/* 表4: 低利润SKU关注 */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <AlertTriangle className="w-5 h-5 text-orange-600" />
-          <h3 className="text-base font-semibold text-slate-900">低利润{dimLabel}关注</h3>
-          <span className="text-[13px] text-slate-500">（按利润率升序，前10）</span>
+      <div className="bg-white rounded-xl p-3 border border-slate-200">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600" />
+          <h3 className="text-[13px] font-semibold text-slate-900">低利润{dimLabel}关注</h3>
+          <span className="text-[12px] text-slate-500">（按利润率升序，前10）</span>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-auto rounded-lg border border-slate-200 max-h-[320px]">
           <table className="w-full min-w-[800px]">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-100">
-                <th className="px-4 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">销量</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">利润率</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">净利润</th>
+                <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销量</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">利润率</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">净利润</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {lowProfitData.length > 0 ? (
                 lowProfitData.map((item) => (
                   <tr key={item.规格} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.规格}>
+                    <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[240px] truncate" title={item.规格}>
                       {item.规格}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-emerald-600 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                       {formatAmount(item.销售额)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-slate-700 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-slate-700 text-right font-mono">
                       {formatNumber(item.销量)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-orange-600 text-right font-mono">
+                    <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                       {formatAmount(item.总成本)}
                     </td>
-                    <td className={`px-4 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
+                    <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.利润率)}`}>
                       {item.利润率 >= 0 ? '+' : ''}
                       {item.利润率.toFixed(2)}%
                     </td>
-                    <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.净利润)}`}>
+                    <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.净利润)}`}>
                       {item.净利润 >= 0 ? '+' : ''}
                       {formatAmount(item.净利润)}
                     </td>
@@ -1680,7 +1767,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 text-[13px]">
+                  <td colSpan={6} className="py-6 text-center text-slate-400 text-[13px]">
                     暂无数据
                   </td>
                 </tr>
@@ -1691,28 +1778,28 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
       </div>
 
       {/* 表5: SKU涨价模拟 */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <FlaskConical className="w-5 h-5 text-purple-600" />
-          <h3 className="text-base font-semibold text-slate-900">{dimLabel}涨价模拟</h3>
-          <span className="text-[13px] text-slate-500">
+      <div className="bg-white rounded-xl p-3 border border-slate-200">
+        <div className="flex items-center gap-2 mb-2">
+          <FlaskConical className="w-4 h-4 text-emerald-600" />
+          <h3 className="text-[13px] font-semibold text-slate-900">{dimLabel}涨价模拟</h3>
+          <span className="text-[12px] text-slate-500">
             （含价格弹性，中性弹性-0.5；按销售额降序，前15）
           </span>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-auto rounded-lg border border-slate-200 max-h-[380px]">
           <table className="w-full min-w-[1280px]">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-100">
-                <th className="px-4 py-3 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">销售额</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">成本</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">当前利润</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">涨1%后利润</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">涨3%后利润</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500">涨5%后利润</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500" title="弹性-0.2，涨价对销量影响小">涨5%·乐观</th>
-                <th className="px-4 py-3 text-right text-[13px] font-medium text-slate-500" title="弹性-1.0，销量降幅≈涨幅">涨5%·保守</th>
-                <th className="px-4 py-3 text-center text-[13px] font-medium text-slate-500">建议</th>
+                <th className="px-3 py-2 text-left text-[13px] font-medium text-slate-500">{dimLabel}</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">销售额</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">成本</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">当前利润</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">涨1%后利润</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">涨3%后利润</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500">涨5%后利润</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500" title="弹性-0.2，涨价对销量影响小">涨5%·乐观</th>
+                <th className="px-3 py-2 text-right text-[13px] font-medium text-slate-500" title="弹性-1.0，销量降幅≈涨幅">涨5%·保守</th>
+                <th className="px-3 py-2 text-center text-[13px] font-medium text-slate-500">建议</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1724,41 +1811,41 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                   );
                   return (
                     <tr key={item.summary.规格} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 text-[13px] text-slate-700 max-w-[200px] truncate" title={item.summary.规格}>
+                      <td className="px-3 py-1.5 text-[13px] text-slate-700 max-w-[200px] truncate" title={item.summary.规格}>
                         {item.summary.规格}
                       </td>
-                      <td className="px-4 py-3 text-[13px] text-emerald-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-emerald-600 text-right font-mono">
                         {formatAmount(item.summary.销售额)}
                       </td>
-                      <td className="px-4 py-3 text-[13px] text-orange-600 text-right font-mono">
+                      <td className="px-3 py-1.5 text-[13px] text-amber-600 text-right font-mono">
                         {formatAmount(item.summary.总成本)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.summary.净利润)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono font-semibold ${getProfitRateColor(item.summary.净利润)}`}>
                         {item.summary.净利润 >= 0 ? '+' : ''}
                         {formatAmount(item.summary.净利润)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.profit1)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.profit1)}`}>
                         {item.profit1 >= 0 ? '+' : ''}
                         {formatAmount(item.profit1)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.profit3)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.profit3)}`}>
                         {item.profit3 >= 0 ? '+' : ''}
                         {formatAmount(item.profit3)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5)}`}>
                         {item.profit5 >= 0 ? '+' : ''}
                         {formatAmount(item.profit5)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5Optimistic)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5Optimistic)}`}>
                         {item.profit5Optimistic >= 0 ? '+' : ''}
                         {formatAmount(item.profit5Optimistic)}
                       </td>
-                      <td className={`px-4 py-3 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5Conservative)}`}>
+                      <td className={`px-3 py-1.5 text-[13px] text-right font-mono ${getProfitRateColor(item.profit5Conservative)}`}>
                         {item.profit5Conservative >= 0 ? '+' : ''}
                         {formatAmount(item.profit5Conservative)}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-[13px] font-medium border ${suggestion.color}`}>
+                      <td className="px-3 py-1.5 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[12px] font-medium border ${suggestion.color}`}>
                           {suggestion.text}
                         </span>
                       </td>
@@ -1767,7 +1854,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-400 text-[13px]">
+                  <td colSpan={10} className="py-6 text-center text-slate-400 text-[13px]">
                     暂无数据
                   </td>
                 </tr>
@@ -1775,7 +1862,7 @@ const OrderOverview: React.FC<OrderOverviewProps> = ({
             </tbody>
           </table>
         </div>
-        <div className="mt-4 pt-4 border-t border-slate-200 text-[13px] text-slate-400 leading-relaxed">
+        <div className="mt-2 pt-2 border-t border-slate-200 text-[12px] text-slate-400 leading-relaxed">
           <p className="mb-1">
             <span className="text-slate-500 font-medium">计算说明：</span>
             引入价格弹性：涨价 X% 后单价 ×(1+X%)、销量 ×(1+X%×E)，E 为价格弹性。

@@ -66,7 +66,7 @@ const QUADRANT_META: Record<
     name: '潜力款',
     sub: '高利润 × 低转化',
     advice: '产品赚钱但流量弱：换主图/素材、提曝光',
-    color: '#0ea5e9',
+    color: '#34d399',
     fillOpacity: 0.45,
   },
   volume: {
@@ -238,7 +238,7 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
     const qk = quadrantOf(it);
     const meta = QUADRANT_META[qk];
     return (
-      <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-lg px-3 py-2.5 text-[13px] max-w-[280px]">
+      <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-[13px] max-w-[280px]">
         <p className="font-semibold text-slate-900 mb-1">{it.名称}</p>
         <p className="font-mono text-slate-500 mb-1.5">商品ID: {it.商品ID}</p>
         <div className="space-y-0.5 text-slate-600">
@@ -275,11 +275,11 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
     const 达标 = scores[weakest] >= 80;
 
     return (
-      <div className="border border-indigo-200 bg-indigo-50/40 rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div>
-            <p className="text-base font-semibold text-slate-900">{it.名称}</p>
-            <p className="text-[13px] font-mono text-slate-500">商品ID: {it.商品ID} · {formatAmount(it.销售额)} · 净利润 {it.净利润 >= 0 ? '+' : ''}{formatAmount(it.净利润)}</p>
+            <p className="text-[13px] font-semibold text-slate-900">{it.名称}</p>
+            <p className="text-[12px] font-mono text-slate-500">商品ID: {it.商品ID} · {formatAmount(it.销售额)} · 净利润 {it.净利润 >= 0 ? '+' : ''}{formatAmount(it.净利润)}</p>
           </div>
           <div className="flex items-center gap-2">
             <span
@@ -299,7 +299,7 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div>
             <p className="text-[13px] font-medium text-slate-600 mb-2">六维雷达（均值=100，低于 80 即短板）</p>
             <div className="h-72">
@@ -308,7 +308,7 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
                   <PolarGrid stroke="#e2e8f0" />
                   <PolarAngleAxis dataKey="dim" tick={{ fontSize: 12, fill: '#64748b' }} />
                   <PolarRadiusAxis domain={[0, 'auto']} tick={{ fontSize: 10, fill: '#94a3b8' }} angle={90} />
-                  <Radar name="本品" dataKey="本品" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} />
+                  <Radar name="本品" dataKey="本品" stroke="#10b981" fill="#10b981" fillOpacity={0.35} />
                   <Radar name="全店均值" dataKey="均值" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.08} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <RTooltip
@@ -351,15 +351,15 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
   const 点数总计 = items.length;
 
   return (
-    <div className="bg-white rounded-xl p-6 border border-slate-200">
-      <div className="flex items-center gap-3 mb-1 flex-wrap">
-        <RadarIcon className="w-5 h-5 text-indigo-600" />
-        <h3 className="text-base font-semibold text-slate-900">利润漏斗诊断</h3>
-        <span className="text-[13px] text-slate-500">
+    <div className="bg-white rounded-xl p-3 border border-slate-200">
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <RadarIcon className="w-4 h-4 text-emerald-600" />
+        <h3 className="text-[13px] font-semibold text-slate-900">利润漏斗诊断</h3>
+        <span className="text-[12px] text-slate-500">
           （利润 = 展现×点击率×转化率×客单价×(1-退款率) - 成本 - 推广）
         </span>
       </div>
-      <p className="text-[13px] text-slate-400 mb-4">
+      <p className="text-[13px] text-slate-400 mb-2">
         {isSku
           ? `SKU 维度：每个规格一个点（共 ${点数总计} 个）；点的展现/点击/转化继承所属商品（推广按商品投放）；悬停看商品ID，点击点展开六维雷达。`
           : `单品维度：每个商品一个点（共 ${点数总计} 个）；悬停看商品ID，点击点展开六维雷达。`}
@@ -409,8 +409,8 @@ const ProfitFunnelDiagnosis: React.FC<ProfitFunnelDiagnosisProps> = ({ summaries
               <ZAxis type="number" dataKey="z" range={[60, 1000]} name="销售额" />
               <Tooltip content={renderScatterTooltip} cursor={{ strokeDasharray: '3 3', stroke: '#cbd5e1' }} />
               {/* 均值分界线：横轴均值 + 利润率均值（≤0 时用 0） */}
-              <ReferenceLine x={avgX} stroke="#6366f1" strokeDasharray="6 4" label={{ value: '均值', fontSize: 10, fill: '#6366f1', position: 'top' }} />
-              <ReferenceLine y={Math.max(avg.利润率, 0)} stroke="#6366f1" strokeDasharray="6 4" label={{ value: '利润率均值', fontSize: 10, fill: '#6366f1', position: 'right' }} />
+              <ReferenceLine x={avgX} stroke="#10b981" strokeDasharray="6 4" label={{ value: '均值', fontSize: 10, fill: '#10b981', position: 'top' }} />
+              <ReferenceLine y={Math.max(avg.利润率, 0)} stroke="#10b981" strokeDasharray="6 4" label={{ value: '利润率均值', fontSize: 10, fill: '#10b981', position: 'right' }} />
               {(['star', 'potential', 'volume', 'tail'] as QuadrantKey[]).map(qk => {
                 const meta = QUADRANT_META[qk];
                 const data = scatterByQuadrant[qk];

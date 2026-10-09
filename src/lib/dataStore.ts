@@ -1,4 +1,4 @@
-import { OrderData, MarketingDataRow } from '../types';
+import { OrderData, MarketingDataRow, ExpressBillRecord } from '../types';
 
 /**
  * 上传数据统一存取层（销售订单 + 营销推广）
@@ -89,4 +89,22 @@ export async function loadMarketingData(): Promise<MarketingDataRow[] | null> {
 
 export async function saveMarketingData(rows: MarketingDataRow[]): Promise<boolean> {
   return saveArrayData(MARKETING_API, MARKETING_KEY, rows);
+}
+
+// ============ 快递对账账单 ============
+
+const EXPRESS_BILL_KEY = 'pddExpressBill';
+const EXPRESS_BILL_API = '/api/config/expressBill';
+
+export async function loadExpressBill(): Promise<ExpressBillRecord[] | null> {
+  return loadArrayData<ExpressBillRecord>(EXPRESS_BILL_API, EXPRESS_BILL_KEY);
+}
+
+export async function saveExpressBill(records: ExpressBillRecord[]): Promise<boolean> {
+  return saveArrayData(EXPRESS_BILL_API, EXPRESS_BILL_KEY, records);
+}
+
+/** 清空快递账单（写入空数组，区别于「从未上传」） */
+export async function clearExpressBill(): Promise<void> {
+  await saveArrayData(EXPRESS_BILL_API, EXPRESS_BILL_KEY, []);
 }

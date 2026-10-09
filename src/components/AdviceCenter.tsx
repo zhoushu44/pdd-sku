@@ -41,16 +41,16 @@ const levelConfig: Record<AdviceLevel, {
   },
   warning: {
     label: '警告',
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-50',
-    borderColor: 'border-orange-200',
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200',
     icon: AlertTriangle,
   },
   info: {
     label: '提示',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
     icon: Info,
   },
   success: {
@@ -111,7 +111,7 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
   return (
     <div className="space-y-5">
       {/* 顶部统计 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {(['critical', 'warning', 'info', 'success'] as AdviceLevel[]).map(level => {
           const config = levelConfig[level];
           const Icon = config.icon;
@@ -119,12 +119,12 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
           return (
             <div
               key={level}
-              className={`${config.bgColor} ${config.borderColor} border rounded-lg p-4`}
+              className={`${config.bgColor} ${config.borderColor} border rounded-lg p-3`}
             >
               <div className="flex items-center justify-between">
                 <div>
                   <div className={`text-[13px] ${config.color} mb-1`}>{config.label}</div>
-                  <div className="text-base font-bold text-slate-900">{count}</div>
+                  <div className="text-[14px] font-bold text-slate-900">{count}</div>
                 </div>
                 <Icon className={`w-8 h-8 ${config.color} opacity-50`} />
               </div>
@@ -170,11 +170,11 @@ const AdviceCenter: React.FC<AdviceCenterProps> = ({ orders, summaries, marketin
             return (
               <div
                 key={advice.id}
-                className={`${config.bgColor} ${config.borderColor} border rounded-lg p-4 transition-all hover:scale-[1.005]`}
+                className={`${config.bgColor} ${config.borderColor} border rounded-lg p-3 transition-all hover:scale-[1.005]`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`flex-shrink-0 w-9 h-9 rounded-full ${config.bgColor} flex items-center justify-center`}>
-                    <Icon className={`w-5 h-5 ${config.color}`} />
+                    <Icon className={`w-4 h-4 ${config.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
